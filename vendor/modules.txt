@@ -387,7 +387,6 @@ k8s.io/client-go/applyconfigurations/storage/v1
 k8s.io/client-go/applyconfigurations/storage/v1alpha1
 k8s.io/client-go/applyconfigurations/storage/v1beta1
 k8s.io/client-go/discovery
-k8s.io/client-go/discovery/cached/memory
 k8s.io/client-go/dynamic
 k8s.io/client-go/kubernetes
 k8s.io/client-go/kubernetes/scheme
@@ -490,7 +489,6 @@ kmodules.xyz/client-go/apiextensions
 kmodules.xyz/client-go/apiextensions/v1
 kmodules.xyz/client-go/apps/v1
 kmodules.xyz/client-go/core/v1
-kmodules.xyz/client-go/discovery
 kmodules.xyz/client-go/meta
 # kmodules.xyz/custom-resources v0.0.0-20220317220154-7beb809b1f5e
 ## explicit; go 1.17

@@ -3,12 +3,9 @@ module github.com/tamalsaha/kubedb-api-demo
 go 1.17
 
 require (
-	github.com/pkg/errors v0.9.1
-	k8s.io/api v0.21.1
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.1
 	k8s.io/klog/v2 v2.9.0
-	kmodules.xyz/client-go v0.0.0-20220401190628-98cb179b1042
 	kubedb.dev/apimachinery v0.26.0
 	sigs.k8s.io/controller-runtime v0.9.0
 )
@@ -45,6 +42,7 @@ require (
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.28.0 // indirect
@@ -69,10 +67,12 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	k8s.io/api v0.21.1 // indirect
 	k8s.io/apiextensions-apiserver v0.21.1 // indirect
 	k8s.io/component-base v0.21.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b // indirect
+	kmodules.xyz/client-go v0.0.0-20220401190628-98cb179b1042 // indirect
 	kmodules.xyz/custom-resources v0.0.0-20220317220154-7beb809b1f5e // indirect
 	kmodules.xyz/monitoring-agent-api v0.0.0-20220319222118-0290ed5b75e1 // indirect
 	kmodules.xyz/objectstore-api v0.0.0-20220317220441-f1d593d0a778 // indirect
