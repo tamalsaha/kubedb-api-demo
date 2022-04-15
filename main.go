@@ -52,6 +52,7 @@ func main() {
 }
 
 func useGeneratedClient() error {
+	fmt.Println("Using Generated client")
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = 100
 	cfg.Burst = 100
@@ -73,6 +74,7 @@ func useGeneratedClient() error {
 }
 
 func useKubebuilderClient() error {
+	fmt.Println("Using kubebuilder client")
 	kc, err := NewClient()
 	if err != nil {
 		return err
