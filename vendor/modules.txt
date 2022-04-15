@@ -23,6 +23,9 @@ github.com/emicklei/go-restful/log
 # github.com/evanphx/json-patch v4.12.0+incompatible
 ## explicit
 github.com/evanphx/json-patch
+# github.com/fatih/structs v1.1.0
+## explicit
+github.com/fatih/structs
 # github.com/fsnotify/fsnotify v1.5.1
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
@@ -96,6 +99,9 @@ github.com/mailru/easyjson/jwriter
 # github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
 ## explicit; go 1.9
 github.com/matttproud/golang_protobuf_extensions/pbutil
+# github.com/mitchellh/mapstructure v1.4.1
+## explicit; go 1.14
+github.com/mitchellh/mapstructure
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
@@ -123,13 +129,19 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/sergi/go-diff v1.2.0
+## explicit; go 1.12
+github.com/sergi/go-diff/diffmatchpatch
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
-# go.uber.org/goleak v1.1.11-0.20210813005559-691160354723
-## explicit; go 1.13
-# go.uber.org/zap v1.19.1
-## explicit; go 1.13
+# github.com/yudai/gojsondiff v1.0.0
+## explicit
+github.com/yudai/gojsondiff
+github.com/yudai/gojsondiff/formatter
+# github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82
+## explicit
+github.com/yudai/golcs
 # golang.org/x/net v0.0.0-20211209124913-491a49abca63
 ## explicit; go 1.17
 golang.org/x/net/context
@@ -161,9 +173,25 @@ golang.org/x/text/width
 # golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 ## explicit
 golang.org/x/time/rate
+# gomodules.xyz/encoding v0.0.4
+## explicit; go 1.17
+gomodules.xyz/encoding/json
+gomodules.xyz/encoding/json/types
 # gomodules.xyz/jsonpatch/v2 v2.2.0
 ## explicit; go 1.12
 gomodules.xyz/jsonpatch/v2
+# gomodules.xyz/mergo v0.3.13-0.20210702100041-9d62ff8ece4d
+## explicit; go 1.13
+gomodules.xyz/mergo
+# gomodules.xyz/pointer v0.1.0
+## explicit; go 1.15
+gomodules.xyz/pointer
+# gomodules.xyz/sets v0.2.1
+## explicit; go 1.14
+gomodules.xyz/sets
+# gomodules.xyz/x v0.0.13
+## explicit; go 1.17
+gomodules.xyz/x/arrays
 # google.golang.org/appengine v1.6.7
 ## explicit; go 1.11
 google.golang.org/appengine/internal
@@ -261,7 +289,12 @@ k8s.io/api/storage/v1beta1
 # k8s.io/apiextensions-apiserver v0.21.1
 ## explicit; go 1.16
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
+k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1
+k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset
+k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme
+k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1
+k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 # k8s.io/apimachinery v0.21.1 => github.com/kmodules/apimachinery v0.21.2-rc.0.0.20210617231004-332981b97d2d
 ## explicit; go 1.16
 k8s.io/apimachinery/pkg/api/equality
@@ -401,6 +434,7 @@ k8s.io/client-go/kubernetes/typed/scheduling/v1beta1
 k8s.io/client-go/kubernetes/typed/storage/v1
 k8s.io/client-go/kubernetes/typed/storage/v1alpha1
 k8s.io/client-go/kubernetes/typed/storage/v1beta1
+k8s.io/client-go/listers/apps/v1
 k8s.io/client-go/metadata
 k8s.io/client-go/pkg/apis/clientauthentication
 k8s.io/client-go/pkg/apis/clientauthentication/v1alpha1
@@ -450,8 +484,60 @@ k8s.io/utils/pointer
 k8s.io/utils/trace
 # kmodules.xyz/client-go v0.0.0-20220401190628-98cb179b1042
 ## explicit; go 1.17
+kmodules.xyz/client-go
 kmodules.xyz/client-go/api/v1
+kmodules.xyz/client-go/apiextensions
+kmodules.xyz/client-go/apiextensions/v1
+kmodules.xyz/client-go/apps/v1
+kmodules.xyz/client-go/core/v1
 kmodules.xyz/client-go/discovery
+kmodules.xyz/client-go/meta
+# kmodules.xyz/custom-resources v0.0.0-20220317220154-7beb809b1f5e
+## explicit; go 1.17
+kmodules.xyz/custom-resources/apis/appcatalog
+kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1
+kmodules.xyz/custom-resources/crds
+# kmodules.xyz/monitoring-agent-api v0.0.0-20220319222118-0290ed5b75e1
+## explicit; go 1.17
+kmodules.xyz/monitoring-agent-api/api/v1
+kmodules.xyz/monitoring-agent-api/api/v1alpha1
+# kmodules.xyz/objectstore-api v0.0.0-20220317220441-f1d593d0a778
+## explicit; go 1.15
+kmodules.xyz/objectstore-api/api/v1
+# kmodules.xyz/offshoot-api v0.0.0-20220323112402-3b0fd2ea77d6
+## explicit; go 1.15
+kmodules.xyz/offshoot-api/api/v1
+# kubedb.dev/apimachinery v0.26.0
+## explicit; go 1.17
+kubedb.dev/apimachinery/apis
+kubedb.dev/apimachinery/apis/autoscaling
+kubedb.dev/apimachinery/apis/autoscaling/v1alpha1
+kubedb.dev/apimachinery/apis/catalog
+kubedb.dev/apimachinery/apis/catalog/v1alpha1
+kubedb.dev/apimachinery/apis/config
+kubedb.dev/apimachinery/apis/config/v1alpha1
+kubedb.dev/apimachinery/apis/dashboard/v1alpha1
+kubedb.dev/apimachinery/apis/kubedb
+kubedb.dev/apimachinery/apis/kubedb/v1alpha1
+kubedb.dev/apimachinery/apis/kubedb/v1alpha2
+kubedb.dev/apimachinery/apis/ops
+kubedb.dev/apimachinery/apis/ops/v1alpha1
+kubedb.dev/apimachinery/apis/schema/v1alpha1
+kubedb.dev/apimachinery/apis/ui
+kubedb.dev/apimachinery/apis/ui/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned
+kubedb.dev/apimachinery/client/clientset/versioned/scheme
+kubedb.dev/apimachinery/client/clientset/versioned/typed/autoscaling/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/catalog/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/config/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/dashboard/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/kubedb/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/kubedb/v1alpha2
+kubedb.dev/apimachinery/client/clientset/versioned/typed/ops/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/schema/v1alpha1
+kubedb.dev/apimachinery/client/clientset/versioned/typed/ui/v1alpha1
+kubedb.dev/apimachinery/crds
+kubedb.dev/apimachinery/pkg/validator
 # sigs.k8s.io/controller-runtime v0.9.0
 ## explicit; go 1.16
 sigs.k8s.io/controller-runtime

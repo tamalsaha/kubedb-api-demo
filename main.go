@@ -4,17 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
-	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/klogr"
-	"kmodules.xyz/client-go/discovery"
+	dbapi "kubedb.dev/apimachinery/apis/kubedb/v1alpha2"
+	kubedbclient "kubedb.dev/apimachinery/client/clientset/versioned"
+	kubedbscheme "kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -23,6 +19,8 @@ import (
 func NewClient() (client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
+	// NOTE: Register KubeDB api types
+	_ = kubedbscheme.AddToScheme(scheme)
 
 	ctrl.SetLogger(klogr.New())
 	cfg := ctrl.GetConfigOrDie()
@@ -45,104 +43,48 @@ func NewClient() (client.Client, error) {
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := useGeneratedClient(); err != nil {
+		panic(err)
+	}
+	if err := useKubebuilderClient(); err != nil {
 		panic(err)
 	}
 }
 
-func run() error {
+func useGeneratedClient() error {
+	cfg := ctrl.GetConfigOrDie()
+	cfg.QPS = 100
+	cfg.Burst = 100
+
+	kc, err := kubedbclient.NewForConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	var pglist *dbapi.PostgresList
+	pglist, err = kc.KubedbV1alpha2().Postgreses(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, db := range pglist.Items {
+		fmt.Println(client.ObjectKeyFromObject(&db))
+	}
+	return nil
+}
+
+func useKubebuilderClient() error {
 	kc, err := NewClient()
 	if err != nil {
 		return err
 	}
 
-	mapper := discovery.NewResourceMapper(kc.RESTMapper())
-
-	gvk := schema.GroupVersionKind{
-		Group:   "tamal.com",
-		Version: "v1",
-		Kind:    "Saha",
-	}
-	namespaced, err := mapper.IsGVKNamespaced(gvk)
-	if err != nil {
-		fmt.Println(meta.IsNoMatchError(err))
-		panic(errors.Wrapf(err, "failed to detect if gvk %v is namespaced", gvk))
-	}
-	fmt.Println(namespaced)
-
-	var ul unstructured.UnstructuredList
-	ul.SetGroupVersionKind(gvk)
-	err = kc.List(context.TODO(), &ul)
-	if err != nil {
-		// meta.IsNoMatchError(err)
-		// runtime.IsMissingKind()
-		// runtime.IsNotRegisteredError(err)
-		fmt.Println(err, meta.IsNoMatchError(err), runtime.IsNotRegisteredError(err), runtime.IsMissingKind(err), runtime.IsMissingVersion(err))
-		return err
-	}
-
-	var ns core.Namespace
-	err = kc.Get(context.TODO(), client.ObjectKey{Name: "kubedb"}, &ns)
+	var pglist dbapi.PostgresList
+	err = kc.List(context.TODO(), &pglist)
 	if err != nil {
 		return err
 	}
-
-	ref := metav1.NewControllerRef(&ns, schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Namespace",
-	})
-
-	apiservices := []string{
-		"v1alpha1.mutators.autoscaling.kubedb.com",
-		"v1alpha1.mutators.dashboard.kubedb.com",
-		"v1alpha1.mutators.kubedb.com",
-		"v1alpha1.mutators.ops.kubedb.com",
-		"v1alpha1.mutators.schema.kubedb.com",
-		"v1alpha1.validators.dashboard.kubedb.com",
-		"v1alpha1.validators.kubedb.com",
-		"v1alpha1.validators.ops.kubedb.com",
-		"v1alpha1.validators.schema.kubedb.com",
-	}
-	for _, name := range apiservices {
-		var apsvc unstructured.Unstructured
-		apsvc.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "apiregistration.k8s.io",
-			Version: "v1",
-			Kind:    "APIService",
-		})
-		err = kc.Get(context.TODO(), client.ObjectKey{Name: name}, &apsvc)
-		if err != nil {
-			return err
-		}
-		EnsureOwnerReference(&apsvc, ref)
-		err = kc.Update(context.TODO(), &apsvc)
-		if err != nil {
-			return err
-		}
+	for _, db := range pglist.Items {
+		fmt.Println(client.ObjectKeyFromObject(&db))
 	}
 	return nil
-}
-
-func EnsureOwnerReference(dependent metav1.Object, owner *metav1.OwnerReference) {
-	if owner == nil {
-		return
-	}
-
-	refs := dependent.GetOwnerReferences()
-
-	fi := -1
-	for i := range refs {
-		if refs[i].UID == owner.UID {
-			fi = i
-			break
-		}
-	}
-	if fi == -1 {
-		refs = append(refs, *owner)
-	} else {
-		refs[fi] = *owner
-	}
-
-	dependent.SetOwnerReferences(refs)
 }
