@@ -58,6 +58,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ElasticsearchOpsRequestList{},
 		&EtcdOpsRequest{},
 		&EtcdOpsRequestList{},
+		&KafkaOpsRequest{},
+		&KafkaOpsRequestList{},
 		&MemcachedOpsRequest{},
 		&MemcachedOpsRequestList{},
 		&MongoDBOpsRequest{},
@@ -72,8 +74,12 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&PostgresOpsRequestList{},
 		&ProxySQLOpsRequest{},
 		&ProxySQLOpsRequestList{},
+		&RabbitMQOpsRequest{},
+		&RabbitMQOpsRequestList{},
 		&RedisOpsRequest{},
 		&RedisOpsRequestList{},
+		&RedisSentinelOpsRequest{},
+		&RedisSentinelOpsRequestList{},
 	)
 
 	scheme.AddKnownTypes(SchemeGroupVersion,

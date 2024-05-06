@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ PerconaXtraDBOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (p PerconaXtraDBOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralPerconaXtraDBOpsRequest))
 }
 
@@ -54,4 +55,26 @@ func (p PerconaXtraDBOpsRequest) ResourcePlural() string {
 
 func (p PerconaXtraDBOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &PerconaXtraDBOpsRequest{}
+
+func (p *PerconaXtraDBOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return p.ObjectMeta
+}
+
+func (p *PerconaXtraDBOpsRequest) GetDBRefName() string {
+	return p.Spec.DatabaseRef.Name
+}
+
+func (p *PerconaXtraDBOpsRequest) GetRequestType() any {
+	return p.Spec.Type
+}
+
+func (p *PerconaXtraDBOpsRequest) GetStatus() OpsRequestStatus {
+	return p.Status
+}
+
+func (p *PerconaXtraDBOpsRequest) SetStatus(s OpsRequestStatus) {
+	p.Status = s
 }

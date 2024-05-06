@@ -23,11 +23,12 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 	meta_util "kmodules.xyz/client-go/meta"
 )
 
-func (_ MySQLOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (m MySQLOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralMySQLOpsRequest))
 }
 
@@ -55,6 +56,28 @@ func (m MySQLOpsRequest) ResourcePlural() string {
 
 func (m MySQLOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &MySQLOpsRequest{}
+
+func (m *MySQLOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return m.ObjectMeta
+}
+
+func (m *MySQLOpsRequest) GetDBRefName() string {
+	return m.Spec.DatabaseRef.Name
+}
+
+func (m *MySQLOpsRequest) GetRequestType() any {
+	return m.Spec.Type
+}
+
+func (m *MySQLOpsRequest) GetStatus() OpsRequestStatus {
+	return m.Status
+}
+
+func (m *MySQLOpsRequest) SetStatus(s OpsRequestStatus) {
+	m.Status = s
 }
 
 func (m MySQLOpsRequest) GetKey() string {

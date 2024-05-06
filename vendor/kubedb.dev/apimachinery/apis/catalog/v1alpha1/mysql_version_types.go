@@ -72,8 +72,8 @@ type MySQLVersionSpec struct {
 	InitContainer MySQLVersionInitContainer `json:"initContainer"`
 	// PSP names
 	PodSecurityPolicies MySQLVersionPodSecurityPolicy `json:"podSecurityPolicies"`
-	// upgrade constraints
-	UpgradeConstraints MySQLUpgradeConstraints `json:"upgradeConstraints"`
+	// update constraints
+	UpdateConstraints MySQLUpdateConstraints `json:"updateConstraints,omitempty"`
 	// Stash defines backup and restore task definitions.
 	// +optional
 	Stash appcat.StashAddonSpec `json:"stash,omitempty"`
@@ -82,6 +82,14 @@ type MySQLVersionSpec struct {
 	Router MySQLVersionRouter `json:"router,omitempty"`
 	// +optional
 	RouterInitContainer MySQLVersionRouterInitContainer `json:"routerInitContainer,omitempty"`
+	// +optional
+	GitSyncer GitSyncer `json:"gitSyncer,omitempty"`
+	// SecurityContext is for the additional config for the DB container
+	// +optional
+	SecurityContext SecurityContext `json:"securityContext"`
+
+	// Archiver defines the walg & kube-stash-addon related specifications
+	Archiver ArchiverSpec `json:"archiver,omitempty"`
 }
 
 // MySQLVersionDatabase is the MySQL Database image
@@ -120,21 +128,21 @@ type MySQLVersionPodSecurityPolicy struct {
 	DatabasePolicyName string `json:"databasePolicyName"`
 }
 
-type MySQLUpgradeConstraints struct {
-	// List of all accepted versions for uprade request
-	Allowlist Allowlist `json:"allowlist,omitempty"`
-	// List of all rejected versions for uprade request
-	Denylist Denylist `json:"denylist,omitempty"`
+type MySQLUpdateConstraints struct {
+	// List of all accepted versions for upgrade request
+	Allowlist MySQLVersionAllowlist `json:"allowlist,omitempty"`
+	// List of all rejected versions for upgrade request
+	Denylist MySQLVersionDenylist `json:"denylist,omitempty"`
 }
 
-type Allowlist struct {
+type MySQLVersionAllowlist struct {
 	// List of all accepted versions for upgrade request of a Standalone server. empty indicates all accepted
 	Standalone []string `json:"standalone,omitempty"`
 	// List of all accepted versions for upgrade request of a GroupReplication cluster. empty indicates all accepted
 	GroupReplication []string `json:"groupReplication,omitempty"`
 }
 
-type Denylist struct {
+type MySQLVersionDenylist struct {
 	// List of all rejected versions for upgrade request of a Standalone server
 	Standalone []string `json:"standalone,omitempty"`
 	// List of all rejected versions for upgrade request of a GroupReplication cluster

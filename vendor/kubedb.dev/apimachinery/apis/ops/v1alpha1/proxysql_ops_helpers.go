@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ ProxySQLOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (p ProxySQLOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralProxySQLOpsRequest))
 }
 
@@ -37,7 +38,7 @@ func (p ProxySQLOpsRequest) ResourceFQN() string {
 }
 
 func (p ProxySQLOpsRequest) ResourceShortCode() string {
-	return ""
+	return ResourceCodeProxySQLOpsRequest
 }
 
 func (p ProxySQLOpsRequest) ResourceKind() string {
@@ -50,4 +51,26 @@ func (p ProxySQLOpsRequest) ResourceSingular() string {
 
 func (p ProxySQLOpsRequest) ResourcePlural() string {
 	return ResourcePluralProxySQLOpsRequest
+}
+
+var _ Accessor = &ProxySQLOpsRequest{}
+
+func (p *ProxySQLOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return p.ObjectMeta
+}
+
+func (p *ProxySQLOpsRequest) GetDBRefName() string {
+	return p.Spec.ProxyRef.Name
+}
+
+func (p *ProxySQLOpsRequest) GetRequestType() any {
+	return p.Spec.Type
+}
+
+func (p *ProxySQLOpsRequest) GetStatus() OpsRequestStatus {
+	return p.Status
+}
+
+func (p *ProxySQLOpsRequest) SetStatus(s OpsRequestStatus) {
+	p.Status = s
 }

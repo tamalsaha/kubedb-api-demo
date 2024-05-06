@@ -56,6 +56,8 @@ type PerconaXtraDBVersionSpec struct {
 	DB PerconaXtraDBVersionDatabase `json:"db"`
 	// Exporter Image
 	Exporter PerconaXtraDBVersionExporter `json:"exporter"`
+	// Coordinator Image
+	Coordinator PerconaXtraDBVersionCoordinator `json:"coordinator,omitempty"`
 	// Deprecated versions usable but regarded as obsolete and best avoided, typically due to having been superseded.
 	// +optional
 	Deprecated bool `json:"deprecated,omitempty"`
@@ -67,6 +69,13 @@ type PerconaXtraDBVersionSpec struct {
 	// Stash defines backup and restore task definitions.
 	// +optional
 	Stash appcat.StashAddonSpec `json:"stash,omitempty"`
+	// update constraints
+	UpdateConstraints UpdateConstraints `json:"updateConstraints,omitempty"`
+	// +optional
+	GitSyncer GitSyncer `json:"gitSyncer,omitempty"`
+	// SecurityContext is for the additional config for the DB container
+	// +optional
+	SecurityContext SecurityContext `json:"securityContext"`
 }
 
 // PerconaXtraDBVersionDatabase is the perconaxtradb image
@@ -81,6 +90,11 @@ type PerconaXtraDBVersionExporter struct {
 
 // PerconaXtraDBVersionInitContainer is the PerconaXtraDB Container initializer
 type PerconaXtraDBVersionInitContainer struct {
+	Image string `json:"image"`
+}
+
+// PerconaXtraDBVersionCoordinator is the PerconaXtraDB Coordinator image
+type PerconaXtraDBVersionCoordinator struct {
 	Image string `json:"image"`
 }
 

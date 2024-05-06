@@ -18,7 +18,6 @@ package v1alpha2
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"time"
 
@@ -27,6 +26,9 @@ import (
 	"kubedb.dev/apimachinery/apis/kubedb"
 	"kubedb.dev/apimachinery/crds"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/pkg/errors"
+	promapi "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"gomodules.xyz/pointer"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,6 +39,7 @@ import (
 	"kmodules.xyz/client-go/apiextensions"
 	core_util "kmodules.xyz/client-go/core/v1"
 	meta_util "kmodules.xyz/client-go/meta"
+	"kmodules.xyz/client-go/policy/secomp"
 	appcat "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	ofst "kmodules.xyz/offshoot-api/api/v1"
@@ -44,6 +47,10 @@ import (
 
 func (_ Postgres) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralPostgres))
+}
+
+func (p *Postgres) AsOwner() *metav1.OwnerReference {
+	return metav1.NewControllerRef(p, SchemeGroupVersion.WithKind(ResourceKindPostgres))
 }
 
 var _ apis.ResourceInfo = &Postgres{}
@@ -102,6 +109,13 @@ func (p Postgres) ResourcePlural() string {
 	return ResourcePluralPostgres
 }
 
+func (p Postgres) GetAuthSecretName() string {
+	if p.Spec.AuthSecret != nil && p.Spec.AuthSecret.Name != "" {
+		return p.Spec.AuthSecret.Name
+	}
+	return meta_util.NameWithSuffix(p.OffshootName(), "auth")
+}
+
 func (p Postgres) ServiceName() string {
 	return p.OffshootName()
 }
@@ -158,6 +172,10 @@ func (p postgresStatsService) Scheme() string {
 	return ""
 }
 
+func (p postgresStatsService) TLSConfig() *promapi.TLSConfig {
+	return nil
+}
+
 func (p Postgres) StatsService() mona.StatsAccessor {
 	return &postgresStatsService{&p}
 }
@@ -197,6 +215,12 @@ func (p *Postgres) SetDefaults(postgresVersion *catalog.PostgresVersion, topolog
 			MaximumLagBeforeFailover: 64 * 1024 * 1024,
 		}
 	}
+	if p.Spec.LeaderElection.TransferLeadershipInterval == nil {
+		p.Spec.LeaderElection.TransferLeadershipInterval = &metav1.Duration{Duration: 1 * time.Second}
+	}
+	if p.Spec.LeaderElection.TransferLeadershipTimeout == nil {
+		p.Spec.LeaderElection.TransferLeadershipTimeout = &metav1.Duration{Duration: 60 * time.Second}
+	}
 	apis.SetDefaultResourceLimits(&p.Spec.Coordinator.Resources, CoordinatorDefaultResources)
 
 	if p.Spec.PodTemplate.Spec.ServiceAccountName == "" {
@@ -219,24 +243,9 @@ func (p *Postgres) SetDefaults(postgresVersion *catalog.PostgresVersion, topolog
 		}
 	}
 
-	if p.Spec.PodTemplate.Spec.ContainerSecurityContext == nil {
-		p.Spec.PodTemplate.Spec.ContainerSecurityContext = &core.SecurityContext{
-			RunAsUser:  postgresVersion.Spec.SecurityContext.RunAsUser,
-			RunAsGroup: postgresVersion.Spec.SecurityContext.RunAsUser,
-			Privileged: pointer.BoolP(false),
-			Capabilities: &core.Capabilities{
-				Add: []core.Capability{"IPC_LOCK", "SYS_RESOURCE"},
-			},
-		}
-	} else {
-		if p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsUser == nil {
-			p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsUser = postgresVersion.Spec.SecurityContext.RunAsUser
-		}
-		if p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsGroup == nil {
-			p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsGroup = p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsUser
-		}
-	}
-
+	p.setDefaultContainerSecurityContext(&p.Spec.PodTemplate, postgresVersion)
+	p.setDefaultCoordinatorSecurityContext(&p.Spec.Coordinator, postgresVersion)
+	p.setDefaultInitContainerSecurityContext(&p.Spec.PodTemplate, postgresVersion)
 	if p.Spec.PodTemplate.Spec.SecurityContext == nil {
 		p.Spec.PodTemplate.Spec.SecurityContext = &core.PodSecurityContext{
 			RunAsUser:  p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsUser,
@@ -254,11 +263,131 @@ func (p *Postgres) SetDefaults(postgresVersion *catalog.PostgresVersion, topolog
 	// So that /var/pv directory have the group permission for the RunAsGroup user GID.
 	// Otherwise, We will get write permission denied.
 	p.Spec.PodTemplate.Spec.SecurityContext.FSGroup = p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsGroup
-
-	p.Spec.Monitor.SetDefaults()
+	p.SetDefaultReplicationMode(postgresVersion)
+	p.SetArbiterDefault()
 	p.SetTLSDefaults()
+	p.SetHealthCheckerDefaults()
 	apis.SetDefaultResourceLimits(&p.Spec.PodTemplate.Spec.Resources, DefaultResources)
 	p.setDefaultAffinity(&p.Spec.PodTemplate, p.OffshootSelectors(), topology)
+
+	p.Spec.Monitor.SetDefaults()
+	if p.Spec.Monitor != nil && p.Spec.Monitor.Prometheus != nil {
+		if p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser == nil {
+			p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser = postgresVersion.Spec.SecurityContext.RunAsUser
+		}
+		if p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup == nil {
+			p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup = postgresVersion.Spec.SecurityContext.RunAsUser
+		}
+	}
+}
+
+func getMajorPgVersion(postgresVersion *catalog.PostgresVersion) (uint64, error) {
+	ver, err := semver.NewVersion(postgresVersion.Spec.Version)
+	if err != nil {
+		return 0, errors.Wrap(err, "Failed to get postgres major.")
+	}
+	return ver.Major(), nil
+}
+
+// SetDefaultReplicationMode set the default replication mode.
+// Replication slot will be prioritized if no WalLimitPolicy is mentioned
+func (p *Postgres) SetDefaultReplicationMode(postgresVersion *catalog.PostgresVersion) {
+	majorVersion, _ := getMajorPgVersion(postgresVersion)
+	if p.Spec.Replication == nil {
+		p.Spec.Replication = &PostgresReplication{}
+	}
+	if p.Spec.Replication.WALLimitPolicy == "" {
+		if majorVersion <= uint64(12) {
+			p.Spec.Replication.WALLimitPolicy = WALKeepSegment
+		} else {
+			p.Spec.Replication.WALLimitPolicy = WALKeepSize
+		}
+	}
+	if p.Spec.Replication.WALLimitPolicy == WALKeepSegment && p.Spec.Replication.WalKeepSegment == nil {
+		p.Spec.Replication.WalKeepSegment = pointer.Int32P(64)
+	}
+	if p.Spec.Replication.WALLimitPolicy == WALKeepSize && p.Spec.Replication.WalKeepSizeInMegaBytes == nil {
+		p.Spec.Replication.WalKeepSizeInMegaBytes = pointer.Int32P(1024)
+	}
+	if p.Spec.Replication.WALLimitPolicy == ReplicationSlot && p.Spec.Replication.MaxSlotWALKeepSizeInMegaBytes == nil {
+		p.Spec.Replication.MaxSlotWALKeepSizeInMegaBytes = pointer.Int32P(-1)
+	}
+}
+
+func (p *Postgres) SetArbiterDefault() {
+	if p.Spec.Arbiter == nil {
+		p.Spec.Arbiter = &ArbiterSpec{
+			Resources: core.ResourceRequirements{},
+		}
+	}
+	apis.SetDefaultResourceLimits(&p.Spec.Arbiter.Resources, DefaultArbiter(false))
+}
+
+func (p *Postgres) setDefaultInitContainerSecurityContext(podTemplate *ofst.PodTemplateSpec, pgVersion *catalog.PostgresVersion) {
+	if podTemplate == nil {
+		return
+	}
+	container := core_util.GetContainerByName(p.Spec.PodTemplate.Spec.InitContainers, PostgresInitContainerName)
+	if container == nil {
+		container = &core.Container{
+			Name:            PostgresInitContainerName,
+			SecurityContext: &core.SecurityContext{},
+			Resources:       DefaultInitContainerResource,
+		}
+	} else if container.SecurityContext == nil {
+		container.SecurityContext = &core.SecurityContext{}
+	}
+	p.assignDefaultContainerSecurityContext(container.SecurityContext, pgVersion)
+	podTemplate.Spec.InitContainers = core_util.UpsertContainer(podTemplate.Spec.InitContainers, *container)
+}
+
+func (p *Postgres) setDefaultCoordinatorSecurityContext(coordinatorTemplate *CoordinatorSpec, pgVersion *catalog.PostgresVersion) {
+	if coordinatorTemplate == nil {
+		return
+	}
+	if coordinatorTemplate.SecurityContext == nil {
+		coordinatorTemplate.SecurityContext = &core.SecurityContext{}
+	}
+	p.assignDefaultContainerSecurityContext(coordinatorTemplate.SecurityContext, pgVersion)
+}
+
+func (p *Postgres) setDefaultContainerSecurityContext(podTemplate *ofst.PodTemplateSpec, pgVersion *catalog.PostgresVersion) {
+	if podTemplate == nil {
+		return
+	}
+	if podTemplate.Spec.ContainerSecurityContext == nil {
+		podTemplate.Spec.ContainerSecurityContext = &core.SecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext == nil {
+		podTemplate.Spec.SecurityContext = &core.PodSecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext.FSGroup == nil {
+		podTemplate.Spec.SecurityContext.FSGroup = pgVersion.Spec.SecurityContext.RunAsUser
+	}
+	p.assignDefaultContainerSecurityContext(podTemplate.Spec.ContainerSecurityContext, pgVersion)
+}
+
+func (p *Postgres) assignDefaultContainerSecurityContext(sc *core.SecurityContext, pgVersion *catalog.PostgresVersion) {
+	if sc.AllowPrivilegeEscalation == nil {
+		sc.AllowPrivilegeEscalation = pointer.BoolP(false)
+	}
+	if sc.Capabilities == nil {
+		sc.Capabilities = &core.Capabilities{
+			Drop: []core.Capability{"ALL"},
+		}
+	}
+	if sc.RunAsNonRoot == nil {
+		sc.RunAsNonRoot = pointer.BoolP(true)
+	}
+	if sc.RunAsUser == nil {
+		sc.RunAsUser = pgVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.RunAsGroup == nil {
+		sc.RunAsGroup = pgVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.SeccompProfile == nil {
+		sc.SeccompProfile = secomp.DefaultSeccompProfile()
+	}
 }
 
 // setDefaultAffinity
@@ -346,60 +475,46 @@ func (p *Postgres) GetCertSecretName(alias PostgresCertificateAlias) string {
 }
 
 // GetSharedBufferSizeForPostgres this func takes a input type int64 which is in bytes
-// return the 25% of the input in Bytes, KiloBytes, MegaBytes, GigaBytes, or TeraBytes
+// return the 25% of the input in Bytes
 func GetSharedBufferSizeForPostgres(resource *resource.Quantity) string {
 	// no more than 25% of main memory (RAM)
-	minSharedBuffer := int64(128 * 1024 * 1024)
+	minSharedBuffer := int64(128)
 	ret := minSharedBuffer
 	if resource != nil {
-		ret = (resource.Value() / 100) * 25
+		ret = resource.Value() / (4 * 1024)
 	}
 	// the shared buffer value can't be less then this
-	// 128 MB  is the minimum
+	// 128 KB  is the minimum
 	if ret < minSharedBuffer {
 		ret = minSharedBuffer
 	}
 
-	sharedBuffer := ConvertBytesInMB(ret)
+	// check If the ret value need to convert into MB
+	// why need this? -> PostgreSQL officially stores shared_buffers as an int32 that's why if the value is greater than 2147483648B.
+	// It's going to through and error that the value is going to cross the limit.
+
+	sharedBuffer := fmt.Sprintf("%skB", strconv.FormatInt(ret, 10))
+	if ret > SharedBuffersGbAsKiloByte {
+		// convert the ret as MB devide by SharedBuffersMbAsByte
+		ret /= SharedBuffersMbAsKiloByte
+		sharedBuffer = fmt.Sprintf("%sMB", strconv.FormatInt(ret, 10))
+	}
+
 	return sharedBuffer
 }
 
-func Round(val float64, roundOn float64, places int) (newVal float64) {
-	var round float64
-	pow := math.Pow(10, float64(places))
-	digit := pow * val
-	// this func take a float and return the int and fractional part separately
-	// math.modf(100.4) will return int part = 100 and fractional part = 0.40000000000000000
-	_, div := math.Modf(digit)
-	if div >= roundOn {
-		round = math.Ceil(digit)
-	} else {
-		round = math.Floor(digit)
+func (m *Postgres) SetHealthCheckerDefaults() {
+	if m.Spec.HealthChecker.PeriodSeconds == nil {
+		m.Spec.HealthChecker.PeriodSeconds = pointer.Int32P(10)
 	}
-	newVal = round / pow
-	return newVal
+	if m.Spec.HealthChecker.TimeoutSeconds == nil {
+		m.Spec.HealthChecker.TimeoutSeconds = pointer.Int32P(10)
+	}
+	if m.Spec.HealthChecker.FailureThreshold == nil {
+		m.Spec.HealthChecker.FailureThreshold = pointer.Int32P(1)
+	}
 }
 
-// ConvertBytesInMB this func takes a input type int64 which is in bytes
-// return the input in Bytes, KiloBytes, MegaBytes, GigaBytes, or TeraBytes
-func ConvertBytesInMB(value int64) string {
-	var suffixes [5]string
-	suffixes[0] = "B"
-	suffixes[1] = "KB"
-	suffixes[2] = "MB"
-	suffixes[3] = "GB"
-	suffixes[4] = "TB"
-
-	// here base is the type we are going to represent the value in string
-	// if base is 2 then we will represent the value in MB.
-	// if base is 0 then represent the value in B.
-	if value == 0 {
-		return "0B"
-	}
-	base := math.Log(float64(value)) / math.Log(1024)
-	getSize := Round(math.Pow(1024, base-math.Floor(base)), .5, 2)
-	getSuffix := suffixes[int(math.Floor(base))]
-
-	valueMB := strconv.FormatFloat(getSize, 'f', -1, 64) + string(getSuffix)
-	return valueMB
+func (m *Postgres) IsRemoteReplica() bool {
+	return m.Spec.RemoteReplica != nil
 }

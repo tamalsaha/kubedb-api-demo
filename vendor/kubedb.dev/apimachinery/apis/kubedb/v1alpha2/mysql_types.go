@@ -31,13 +31,14 @@ const (
 	ResourcePluralMySQL   = "mysqls"
 )
 
-// +kubebuilder:validation:Enum=GroupReplication;InnoDBCluster;ReadReplica
+// +kubebuilder:validation:Enum=GroupReplication;InnoDBCluster;RemoteReplica;SemiSync
 type MySQLMode string
 
 const (
 	MySQLModeGroupReplication MySQLMode = "GroupReplication"
 	MySQLModeInnoDBCluster    MySQLMode = "InnoDBCluster"
-	MySQLModeReadReplica      MySQLMode = "ReadReplica"
+	MySQLModeRemoteReplica    MySQLMode = "RemoteReplica"
+	MySQLModeSemiSync         MySQLMode = "SemiSync"
 )
 
 // +kubebuilder:validation:Enum=Single-Primary
@@ -68,6 +69,10 @@ type MySQL struct {
 }
 
 type MySQLSpec struct {
+	// AutoOps contains configuration of automatic ops-request-recommendation generation
+	// +optional
+	AutoOps AutoOpsSpec `json:"autoOps,omitempty"`
+
 	// Version of MySQL to be deployed.
 	Version string `json:"version"`
 
@@ -86,7 +91,8 @@ type MySQLSpec struct {
 	Storage *core.PersistentVolumeClaimSpec `json:"storage,omitempty"`
 
 	// Database authentication secret
-	AuthSecret *core.LocalObjectReference `json:"authSecret,omitempty"`
+	// +optional
+	AuthSecret *SecretReference `json:"authSecret,omitempty"`
 
 	// Init is used to initialize database
 	// +optional
@@ -126,7 +132,7 @@ type MySQLSpec struct {
 
 	// Indicated whether to use DNS or IP address to address pods in a db cluster.
 	// If IP address is used, HostNetwork will be used. Defaults to DNS.
-	// +kubebuilder:default:=DNS
+	// +kubebuilder:default=DNS
 	// +optional
 	// +default="DNS"
 	UseAddressType AddressType `json:"useAddressType,omitempty"`
@@ -135,8 +141,8 @@ type MySQLSpec struct {
 	// +optional
 	Coordinator CoordinatorSpec `json:"coordinator,omitempty"`
 
-	// AllowedSchemas defines the types of database schemas that MAY refer to
-	// a database instance and the trusted namespaces where those schema resources MAY be
+	// AllowedSchemas defines the types of database schemas that may refer to
+	// a database instance and the trusted namespaces where those schema resources may be
 	// present.
 	//
 	// +kubebuilder:default={namespaces:{from: Same}}
@@ -151,6 +157,15 @@ type MySQLSpec struct {
 	// +kubebuilder:default={namespaces:{from: Same}}
 	// +optional
 	AllowedReadReplicas *AllowedConsumers `json:"allowedReadReplicas,omitempty"`
+
+	// HealthChecker defines attributes of the health checker
+	// +optional
+	// +kubebuilder:default={periodSeconds: 10, timeoutSeconds: 10, failureThreshold: 1}
+	HealthChecker kmapi.HealthCheckSpec `json:"healthChecker"`
+
+	// Archiver controls database backup using Archiver CR
+	// +optional
+	Archiver *Archiver `json:"archiver,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=server;client;metrics-exporter
@@ -176,10 +191,33 @@ type MySQLTopology struct {
 	// +optional
 	InnoDBCluster *MySQLInnoDBClusterSpec `json:"innoDBCluster,omitempty"`
 
-	// ReadReplica implies that the instance will be a MySQL Read Only Replica
+	// RemoteReplica implies that the instance will be a MySQL Read Only Replica
 	// and it will take reference of  appbinding of the source
 	// +optional
-	ReadReplica *MySQLReadReplicaSpec `json:"readReplica,omitempty"`
+	RemoteReplica *RemoteReplicaSpec `json:"remoteReplica,omitempty"`
+	// +optional
+	SemiSync *SemiSyncSpec `json:"semiSync,omitempty"`
+}
+
+// +kubebuilder:validation:Enum= Clone;PseudoTransaction
+
+type ErrantTransactionRecoveryPolicy string
+
+const (
+	ErrantTransactionRecoveryPolicyClone             ErrantTransactionRecoveryPolicy = "Clone"
+	ErrantTransactionRecoveryPolicyPseudoTransaction ErrantTransactionRecoveryPolicy = "PseudoTransaction"
+)
+
+type SemiSyncSpec struct {
+	// count of slave to wait for before commit
+	// +kubebuilder:default=1
+	//+kubebuilder:validation:Minimum=1
+	SourceWaitForReplicaCount int `json:"sourceWaitForReplicaCount,omitempty"`
+	// +kubebuilder:default="24h"
+	SourceTimeout metav1.Duration `json:"sourceTimeout,omitempty"`
+	// recovery method if the slave has any errant transaction
+	// +kubebuilder:default=PseudoTransaction
+	ErrantTransactionRecoveryPolicy *ErrantTransactionRecoveryPolicy `json:"errantTransactionRecoveryPolicy"`
 }
 
 type MySQLGroupSpec struct {
@@ -203,18 +241,13 @@ type MySQLInnoDBClusterSpec struct {
 
 type MySQLRouterSpec struct {
 	// +optional
-	// +kubebuilder:default:=1
+	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum:=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// PodTemplate is an optional configuration for pods used to expose MySQL router
 	// +optional
 	PodTemplate *ofst.PodTemplateSpec `json:"podTemplate,omitempty"`
-}
-
-type MySQLReadReplicaSpec struct {
-	// SourceRef specifies the  source object
-	SourceRef core.ObjectReference `json:"sourceRef" protobuf:"bytes,1,opt,name=sourceRef"`
 }
 
 type MySQLStatus struct {
@@ -228,6 +261,10 @@ type MySQLStatus struct {
 	// Conditions applied to the database, such as approval or denial.
 	// +optional
 	Conditions []kmapi.Condition `json:"conditions,omitempty"`
+	// +optional
+	AuthSecret *Age `json:"authSecret,omitempty"`
+	// +optional
+	Gateway *Gateway `json:"gateway,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

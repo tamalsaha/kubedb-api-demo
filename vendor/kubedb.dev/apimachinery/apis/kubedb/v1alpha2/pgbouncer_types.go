@@ -52,32 +52,60 @@ type PgBouncer struct {
 }
 
 type PgBouncerSpec struct {
+	// AutoOps contains configuration of automatic ops-request-recommendation generation
+	// +optional
+	AutoOps AutoOpsSpec `json:"autoOps,omitempty"`
+
 	// Version of PgBouncer to be deployed.
 	Version string `json:"version"`
+
 	// Number of instances to deploy for a PgBouncer instance.
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
+
 	// ServiceTemplates is an optional configuration for services used to expose database
 	// +optional
 	ServiceTemplates []NamedServiceTemplateSpec `json:"serviceTemplates,omitempty"`
+
 	// PodTemplate is an optional configuration for pods.
 	// +optional
 	PodTemplate ofst.PodTemplateSpec `json:"podTemplate,omitempty"`
+
 	// Databases to proxy by connection pooling.
 	// +optional
 	Databases []Databases `json:"databases,omitempty"`
+
 	// ConnectionPoolConfig defines Connection pool configuration.
 	// +optional
 	ConnectionPool *ConnectionPoolConfig `json:"connectionPool,omitempty"`
-	// UserListSecretRef is a secret with a list of PgBouncer user and passwords.
+
+	// Database authentication secret
 	// +optional
-	UserListSecretRef *core.LocalObjectReference `json:"userListSecretRef,omitempty"`
+	AuthSecret *SecretReference `json:"authSecret,omitempty"`
+
+	// ConfigSecret is an optional field to provide custom configuration file for database (i.e mongod.cnf).
+	// If specified, this file will be used as configuration file otherwise default configuration file will be used.
+	ConfigSecret *core.LocalObjectReference `json:"configSecret,omitempty"`
+
 	// Monitor is used monitor database instance.
 	// +optional
 	Monitor *mona.AgentSpec `json:"monitor,omitempty"`
+
+	// SSLMode for both standalone and clusters. [disable;allow;prefer;require;verify-ca;verify-full]
+	SSLMode PgBouncerSSLMode `json:"sslMode,omitempty"`
+
 	// TLS contains tls configurations for client and server.
 	// +optional
 	TLS *kmapi.TLSConfig `json:"tls,omitempty"`
+
+	// TerminationPolicy controls the delete operation for database
+	// +optional
+	TerminationPolicy PgBouncerTerminationPolicy `json:"terminationPolicy,omitempty"`
+
+	// HealthChecker defines attributes of the health checker
+	// +optional
+	// +kubebuilder:default={periodSeconds: 10, timeoutSeconds: 10, failureThreshold: 1}
+	HealthChecker kmapi.HealthCheckSpec `json:"healthChecker"`
 }
 
 // +kubebuilder:validation:Enum=server;archiver;metrics-exporter
@@ -96,59 +124,66 @@ type Databases struct {
 	DatabaseRef appcat.AppReference `json:"databaseRef"`
 	// DatabaseName is the name of the target database inside a Postgres instance.
 	DatabaseName string `json:"databaseName"`
-	// AuthSecretRef points to a secret that contains the credentials
-	// (username and password) of an existing user of this database.
-	// It is used to bind a single user to this specific database connection.
-	// +optional
-	AuthSecretRef *core.LocalObjectReference `json:"authSecretRef,omitempty"`
 }
 
 type ConnectionPoolConfig struct {
 	// Port is the port number on which PgBouncer listens to clients. Default: 5432.
+	// +kubebuilder:default=5432
 	// +optional
 	Port *int32 `json:"port,omitempty"`
 	// PoolMode is the pooling mechanism type. Default: session.
+	// +kubebuilder:default="session"
 	// +optional
 	PoolMode string `json:"poolMode,omitempty"`
 	// MaxClientConnections is the maximum number of allowed client connections. Default: 100.
+	// +kubebuilder:default=100
 	// +optional
 	MaxClientConnections *int64 `json:"maxClientConnections,omitempty"`
 	// DefaultPoolSize specifies how many server connections to allow per user/database pair. Default: 20.
+	// +kubebuilder:default=20
 	// +optional
 	DefaultPoolSize *int64 `json:"defaultPoolSize,omitempty"`
 	// MinPoolSize is used to add more server connections to pool if below this number. Default: 0 (disabled).
+	// +kubebuilder:default=0
 	// +optional
 	MinPoolSize *int64 `json:"minPoolSize,omitempty"`
 	// ReservePoolSize specifies how many additional connections to allow to a pool. 0 disables. Default: 0 (disabled).
+	// +kubebuilder:default=0
 	// +optional
 	ReservePoolSize *int64 `json:"reservePoolSize,omitempty"`
 	// ReservePoolTimeoutSeconds is the number of seconds in which if a client has not been serviced,
 	// pgbouncer enables use of additional connections from reserve pool. 0 disables. Default: 5.0.
+	// +kubebuilder:default=5
 	// +optional
 	ReservePoolTimeoutSeconds *int64 `json:"reservePoolTimeoutSeconds,omitempty"`
-	// MaxDBConnections is the maximum number of connections allowed per-database. Default: unlimited.
+	// MaxDBConnections is the maximum number of connections allowed per-database. Default: 0 (unlimited).
+	// +kubebuilder:default=0
 	// +optional
 	MaxDBConnections *int64 `json:"maxDBConnections,omitempty"`
-	// MaxUserConnections is the maximum number of users allowed per-database. Default: unlimited.
+	// MaxUserConnections is the maximum number of users allowed per-database. Default: 0 (unlimited).
+	// +kubebuilder:default=0
 	// +optional
 	MaxUserConnections *int64 `json:"maxUserConnections,omitempty"`
 	// StatsPeriodSeconds sets how often the averages shown in various SHOW commands are updated
-	// and how often aggregated statistics are written to the log.
+	// and how often aggregated statistics are written to the log. Default: 60
+	// +kubebuilder:default=60
 	// +optional
 	StatsPeriodSeconds *int64 `json:"statsPeriodSeconds,omitempty"`
-	// AdminUsers specifies an array of users who can act as PgBouncer administrators.
-	// +optional
-	AdminUsers []string `json:"adminUsers,omitempty"`
 	// AuthType specifies how to authenticate users. Default: md5 (md5+plain text).
+	// +kubebuilder:default=md5
 	// +optional
-	AuthType string `json:"authType,omitempty"`
-	// AuthUser looks up any user not specified in auth_file from pg_shadow. Default: not set.
-	// +optional
-	AuthUser string `json:"authUser,omitempty"`
+	AuthType PgBouncerClientAuthMode `json:"authType,omitempty"`
 	// IgnoreStartupParameters specifies comma-separated startup parameters that
-	// pgbouncer knows are handled by admin and it can ignore them.
+	// pgbouncer knows are handled by admin and it can ignore them. Default: empty
+	// +kubebuilder:default="empty"
 	// +optional
 	IgnoreStartupParameters string `json:"ignoreStartupParameters,omitempty"`
+	// AdminUsers specifies an array of users who can act as PgBouncer administrators.
+	// +optional
+	// AdminUsers []string `json:"adminUsers,omitempty"`
+	// AuthUser looks up any user not specified in auth_file from pg_shadow. Default: not set.
+	// +optional
+	// AuthUser string `json:"authUser,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -170,4 +205,70 @@ type PgBouncerStatus struct {
 	// Conditions applied to the database, such as approval or denial.
 	// +optional
 	Conditions []kmapi.Condition `json:"conditions,omitempty"`
+	// +optional
+	Gateway *Gateway `json:"gateway,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=disable;allow;prefer;require;verify-ca;verify-full
+type PgBouncerSSLMode string
+
+const (
+	// PgBouncerSSLModeDisable represents `disable` sslMode. It ensures that the server does not use TLS/SSL.
+	PgBouncerSSLModeDisable PgBouncerSSLMode = "disable"
+
+	// PgBouncerSSLModeAllow represents `allow` sslMode. 	I don't care about security,
+	// but I will pay the overhead of encryption if the server insists on it.
+	PgBouncerSSLModeAllow PgBouncerSSLMode = "allow"
+
+	// PgBouncerSSLModePrefer represents `preferSSL` sslMode.
+	// I don't care about encryption, but I wish to pay the overhead of encryption if the server supports it.
+	PgBouncerSSLModePrefer PgBouncerSSLMode = "prefer"
+
+	// PgBouncerSSLModeRequire represents `requiteSSL` sslmode. I want my data to be encrypted, and I accept the overhead.
+	// I trust that the network will make sure I always connect to the server I want.
+	PgBouncerSSLModeRequire PgBouncerSSLMode = "require"
+
+	// PgBouncerSSLModeVerifyCA represents `verify-ca` sslmode. I want my data encrypted, and I accept the overhead.
+	// I want to be sure that I connect to a server that I trust.
+	PgBouncerSSLModeVerifyCA PgBouncerSSLMode = "verify-ca"
+
+	// PgBouncerSSLModeVerifyFull represents `verify-full` sslmode. I want my data encrypted, and I accept the overhead.
+	// I want to be sure that I connect to a server I trust, and that it's the one I specify.
+	PgBouncerSSLModeVerifyFull PgBouncerSSLMode = "verify-full"
+)
+
+// PgBouncerClientAuthMode represents the ClientAuthMode of PgBouncer clusters ( replicaset )
+// We are allowing md5, scram, cert as ClientAuthMode
+// +kubebuilder:validation:Enum=md5;scram;cert;
+type PgBouncerClientAuthMode string
+
+const (
+	// ClientAuthModeMD5 uses a custom less secure challenge-response mechanism.
+	// It prevents password sniffing and avoids storing passwords on the server in plain text but provides no protection
+	// if an attacker manages to steal the password hash from the server.
+	// Also, the MD5 hash algorithm is nowadays no longer considered secure against determined attacks
+	PgBouncerClientAuthModeMD5 PgBouncerClientAuthMode = "md5"
+
+	// ClientAuthModeScram performs SCRAM-SHA-256 authentication, as described in RFC 7677.
+	// It is a challenge-response scheme that prevents password sniffing on untrusted connections
+	// and supports storing passwords on the server in a cryptographically hashed form that is thought to be secure.
+	// This is the most secure of the currently provided methods, but it is not supported by older client libraries.
+	PgBouncerClientAuthModeScram PgBouncerClientAuthMode = "scram"
+
+	// ClientAuthModeCert represents `cert clientcert=1` auth mode where client need to provide cert and private key for authentication.
+	// When server is config with this auth method. Client can't connect with pgbouncer server with password. They need
+	// to Send the client cert and client key certificate for authentication.
+	PgBouncerClientAuthModeCert PgBouncerClientAuthMode = "cert"
+)
+
+// +kubebuilder:validation:Enum=Delete;WipeOut;DoNotTerminate
+type PgBouncerTerminationPolicy string
+
+const (
+	// Deletes database pods, service, pvcs but leave the stash backup data intact.
+	PgBouncerTerminationPolicyDelete PgBouncerTerminationPolicy = "Delete"
+	// Deletes database pods, service, pvcs and stash backup data.
+	PgBouncerTerminationPolicyWipeOut PgBouncerTerminationPolicy = "WipeOut"
+	// Rejects attempt to delete database using ValidationWebhook.
+	PgBouncerTerminationPolicyDoNotTerminate PgBouncerTerminationPolicy = "DoNotTerminate"
+)

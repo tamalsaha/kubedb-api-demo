@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ RedisOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (r RedisOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralRedisOpsRequest))
 }
 
@@ -54,4 +55,26 @@ func (r RedisOpsRequest) ResourcePlural() string {
 
 func (r RedisOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &RedisOpsRequest{}
+
+func (r *RedisOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return r.ObjectMeta
+}
+
+func (r *RedisOpsRequest) GetDBRefName() string {
+	return r.Spec.DatabaseRef.Name
+}
+
+func (r *RedisOpsRequest) GetRequestType() any {
+	return r.Spec.Type
+}
+
+func (r *RedisOpsRequest) GetStatus() OpsRequestStatus {
+	return r.Status
+}
+
+func (r *RedisOpsRequest) SetStatus(s OpsRequestStatus) {
+	r.Status = s
 }

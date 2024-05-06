@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+
 	v1alpha1 "kubedb.dev/apimachinery/apis/autoscaling/v1alpha1"
 	"kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 
@@ -29,6 +31,7 @@ type AutoscalingV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ElasticsearchAutoscalersGetter
 	EtcdAutoscalersGetter
+	KafkaAutoscalersGetter
 	MariaDBAutoscalersGetter
 	MemcachedAutoscalersGetter
 	MongoDBAutoscalersGetter
@@ -37,7 +40,9 @@ type AutoscalingV1alpha1Interface interface {
 	PgBouncerAutoscalersGetter
 	PostgresAutoscalersGetter
 	ProxySQLAutoscalersGetter
+	RabbitMQAutoscalersGetter
 	RedisAutoscalersGetter
+	RedisSentinelAutoscalersGetter
 }
 
 // AutoscalingV1alpha1Client is used to interact with features provided by the autoscaling.kubedb.com group.
@@ -51,6 +56,10 @@ func (c *AutoscalingV1alpha1Client) ElasticsearchAutoscalers(namespace string) E
 
 func (c *AutoscalingV1alpha1Client) EtcdAutoscalers(namespace string) EtcdAutoscalerInterface {
 	return newEtcdAutoscalers(c, namespace)
+}
+
+func (c *AutoscalingV1alpha1Client) KafkaAutoscalers(namespace string) KafkaAutoscalerInterface {
+	return newKafkaAutoscalers(c, namespace)
 }
 
 func (c *AutoscalingV1alpha1Client) MariaDBAutoscalers(namespace string) MariaDBAutoscalerInterface {
@@ -85,17 +94,41 @@ func (c *AutoscalingV1alpha1Client) ProxySQLAutoscalers(namespace string) ProxyS
 	return newProxySQLAutoscalers(c, namespace)
 }
 
+func (c *AutoscalingV1alpha1Client) RabbitMQAutoscalers(namespace string) RabbitMQAutoscalerInterface {
+	return newRabbitMQAutoscalers(c, namespace)
+}
+
 func (c *AutoscalingV1alpha1Client) RedisAutoscalers(namespace string) RedisAutoscalerInterface {
 	return newRedisAutoscalers(c, namespace)
 }
 
+func (c *AutoscalingV1alpha1Client) RedisSentinelAutoscalers(namespace string) RedisSentinelAutoscalerInterface {
+	return newRedisSentinelAutoscalers(c, namespace)
+}
+
 // NewForConfig creates a new AutoscalingV1alpha1Client for the given config.
+// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
+// where httpClient was generated with rest.HTTPClientFor(c).
 func NewForConfig(c *rest.Config) (*AutoscalingV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
 	}
-	client, err := rest.RESTClientFor(&config)
+	httpClient, err := rest.HTTPClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return NewForConfigAndClient(&config, httpClient)
+}
+
+// NewForConfigAndClient creates a new AutoscalingV1alpha1Client for the given config and http client.
+// Note the http client provided takes precedence over the configured transport values.
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*AutoscalingV1alpha1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

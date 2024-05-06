@@ -69,6 +69,15 @@ type MariaDBVersionSpec struct {
 	// Stash defines backup and restore task definitions.
 	// +optional
 	Stash appcat.StashAddonSpec `json:"stash,omitempty"`
+	// update constraints
+	UpdateConstraints UpdateConstraints `json:"updateConstraints,omitempty"`
+	// +optional
+	GitSyncer GitSyncer `json:"gitSyncer,omitempty"`
+	// SecurityContext is for the additional config for the DB container
+	// +optional
+	SecurityContext SecurityContext `json:"securityContext"`
+	// Archiver defines the walg & stash-addon related specifications
+	Archiver ArchiverSpec `json:"archiver,omitempty"`
 }
 
 // MariaDBVersionDatabase is the mariadb image

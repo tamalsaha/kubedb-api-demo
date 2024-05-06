@@ -22,6 +22,8 @@ type ElasticsearchAutoscalerExpansion interface{}
 
 type EtcdAutoscalerExpansion interface{}
 
+type KafkaAutoscalerExpansion interface{}
+
 type MariaDBAutoscalerExpansion interface{}
 
 type MemcachedAutoscalerExpansion interface{}
@@ -38,4 +40,8 @@ type PostgresAutoscalerExpansion interface{}
 
 type ProxySQLAutoscalerExpansion interface{}
 
+type RabbitMQAutoscalerExpansion interface{}
+
 type RedisAutoscalerExpansion interface{}
+
+type RedisSentinelAutoscalerExpansion interface{}

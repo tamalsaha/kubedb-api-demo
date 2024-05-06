@@ -44,7 +44,7 @@ type MongoDBDatabaseSpec struct {
 
 	// DeletionPolicy controls the delete operation for database
 	// +optional
-	// +kubebuilder:default:="Delete"
+	// +kubebuilder:default="Delete"
 	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
 }
 
@@ -66,6 +66,7 @@ type MongoDBDatabaseConfiguration struct {
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:path=mongodbdatabases,singular=mongodbdatabase,shortName=mgschema,categories={datastore,kubedb,appscode,all}
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="DB_SERVER",type="string",JSONPath=".spec.database.serverRef.name"
 // +kubebuilder:printcolumn:name="DB_NAME",type="string",JSONPath=".spec.database.config.name"

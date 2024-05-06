@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ PostgresOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (p PostgresOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralPostgresOpsRequest))
 }
 
@@ -54,4 +55,26 @@ func (p PostgresOpsRequest) ResourcePlural() string {
 
 func (p PostgresOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &PostgresOpsRequest{}
+
+func (p *PostgresOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return p.ObjectMeta
+}
+
+func (p *PostgresOpsRequest) GetDBRefName() string {
+	return p.Spec.DatabaseRef.Name
+}
+
+func (p *PostgresOpsRequest) GetRequestType() any {
+	return p.Spec.Type
+}
+
+func (p *PostgresOpsRequest) GetStatus() OpsRequestStatus {
+	return p.Status
+}
+
+func (p *PostgresOpsRequest) SetStatus(s OpsRequestStatus) {
+	p.Status = s
 }

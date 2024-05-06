@@ -20,7 +20,6 @@ import (
 	"k8s.io/api/autoscaling/v2beta2"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -55,14 +54,14 @@ type PgBouncerAutoscaler struct {
 
 	// status is the current information about the autoscaler.
 	// +optional
-	Status PgBouncerAutoscalerStatus `json:"status,omitempty"`
+	Status AutoscalerStatus `json:"status,omitempty"`
 }
 
 // PgBouncerAutoscalerSpec describes the desired functionality of the PgBouncerAutoscaler.
 type PgBouncerAutoscalerSpec struct {
 	// scaleTargetRef points to the target resource to scale, and is used to the pods for which metrics
 	// should be collected, as well as to actually change the replica count.
-	ScaleTargetRef core.LocalObjectReference `json:"scaleTargetRef"`
+	ServerRef core.LocalObjectReference `json:"serverRef"`
 	// minReplicas is the lower limit for the number of replicas to which the autoscaler
 	// can scale down.  It defaults to 1 pod.  minReplicas is allowed to be 0 if the
 	// alpha feature gate HPAScaleToZero is enabled and at least one Object or External
@@ -144,34 +143,6 @@ type PgBouncerScalingPolicy struct {
 	// PeriodSeconds specifies the window of time for which the policy should hold true.
 	// PeriodSeconds must be greater than zero and less than or equal to 1800 (30 min).
 	PeriodSeconds int32 `json:"periodSeconds"`
-}
-
-// PgBouncerAutoscalerStatus describes the current status of a horizontal pod autoscaler.
-type PgBouncerAutoscalerStatus struct {
-	// observedGeneration is the most recent generation observed by this autoscaler.
-	// +optional
-	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
-
-	// lastScaleTime is the last time the PgBouncerAutoscaler scaled the number of pods,
-	// used by the autoscaler to control how often the number of pods is changed.
-	// +optional
-	LastScaleTime *metav1.Time `json:"lastScaleTime,omitempty"`
-
-	// currentReplicas is current number of replicas of pods managed by this autoscaler,
-	// as last seen by the autoscaler.
-	CurrentReplicas int32 `json:"currentReplicas"`
-
-	// desiredReplicas is the desired number of replicas of pods managed by this autoscaler,
-	// as last calculated by the autoscaler.
-	DesiredReplicas int32 `json:"desiredReplicas"`
-
-	// currentMetrics is the last read state of the metrics used by this autoscaler.
-	// +optional
-	CurrentMetrics []v2beta2.MetricStatus `json:"currentMetrics"`
-
-	// conditions is the set of conditions required for this autoscaler to scale its target,
-	// and indicates whether or not those conditions are met.
-	Conditions []kmapi.Condition `json:"conditions"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//go:generate go-enum --mustparse --names --values
 package v1alpha1
 
 import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -44,8 +44,8 @@ const (
 type EtcdOpsRequest struct {
 	metav1.TypeMeta   `json:",inline,omitempty"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              EtcdOpsRequestSpec   `json:"spec,omitempty"`
-	Status            EtcdOpsRequestStatus `json:"status,omitempty"`
+	Spec              EtcdOpsRequestSpec `json:"spec,omitempty"`
+	Status            OpsRequestStatus   `json:"status,omitempty"`
 }
 
 // EtcdOpsRequestSpec is the spec for EtcdOpsRequest
@@ -53,9 +53,9 @@ type EtcdOpsRequestSpec struct {
 	// Specifies the Etcd reference
 	DatabaseRef core.LocalObjectReference `json:"databaseRef"`
 	// Specifies the ops request type: Upgrade, HorizontalScaling, VerticalScaling etc.
-	Type OpsRequestType `json:"type"`
+	Type EtcdOpsRequestType `json:"type"`
 	// Specifies information necessary for upgrading Etcd
-	Upgrade *EtcdUpgradeSpec `json:"upgrade,omitempty"`
+	UpdateVersion *EtcdUpdateVersionSpec `json:"updateVersion,omitempty"`
 	// Specifies information necessary for horizontal scaling
 	HorizontalScaling *EtcdHorizontalScalingSpec `json:"horizontalScaling,omitempty"`
 	// Specifies information necessary for vertical scaling
@@ -68,13 +68,20 @@ type EtcdOpsRequestSpec struct {
 	TLS *TLSSpec `json:"tls,omitempty"`
 	// Specifies information necessary for restarting database
 	Restart *RestartSpec `json:"restart,omitempty"`
+	// ApplyOption is to control the execution of OpsRequest depending on the database state.
+	// +kubebuilder:default="IfReady"
+	Apply ApplyOption `json:"apply,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=UpdateVersion;HorizontalScaling;VerticalScaling;VolumeExpansion;Restart;Reconfigure;ReconfigureTLS
+// ENUM(UpdateVersion, HorizontalScaling, VerticalScaling, VolumeExpansion, Restart, Reconfigure, ReconfigureTLS)
+type EtcdOpsRequestType string
 
 // EtcdReplicaReadinessCriteria is the criteria for checking readiness of a Etcd pod
 // after updating, horizontal scaling etc.
 type EtcdReplicaReadinessCriteria struct{}
 
-type EtcdUpgradeSpec struct {
+type EtcdUpdateVersionSpec struct {
 	// Specifies the target version name from catalog
 	TargetVersion     string                        `json:"targetVersion,omitempty"`
 	ReadinessCriteria *EtcdReplicaReadinessCriteria `json:"readinessCriteria,omitempty"`
@@ -97,18 +104,6 @@ type EtcdCustomConfiguration struct {
 	ConfigMap *core.LocalObjectReference `json:"configMap,omitempty"`
 	Data      map[string]string          `json:"data,omitempty"`
 	Remove    bool                       `json:"remove,omitempty"`
-}
-
-// EtcdOpsRequestStatus is the status for EtcdOpsRequest
-type EtcdOpsRequestStatus struct {
-	Phase OpsRequestPhase `json:"phase,omitempty"`
-	// observedGeneration is the most recent generation observed for this resource. It corresponds to the
-	// resource's generation, which is updated on mutation by the API Server.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Conditions applied to the request, such as approval or denial.
-	// +optional
-	Conditions []kmapi.Condition `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

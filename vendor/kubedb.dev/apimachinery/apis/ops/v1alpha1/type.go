@@ -17,189 +17,29 @@ limitations under the License.
 package v1alpha1
 
 import (
+	core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kmapi "kmodules.xyz/client-go/api/v1"
+	nodemeta "kmodules.xyz/resource-metadata/apis/node/v1alpha1"
 )
 
-// List of possible condition types for a ops request
-const (
-	AccessApproved               = "Approved"
-	AccessDenied                 = "Denied"
-	DisableSharding              = "DisableSharding"
-	EnableSharding               = "EnableSharding"
-	Failed                       = "Failed"
-	HorizontalScalingDatabase    = "HorizontalScaling"
-	MigratingData                = "MigratingData"
-	NodeCreated                  = "NodeCreated"
-	NodeDeleted                  = "NodeDeleted"
-	NodeRestarted                = "NodeRestarted"
-	PauseDatabase                = "PauseDatabase"
-	Progressing                  = "Progressing"
-	ResumeDatabase               = "ResumeDatabase"
-	ScalingDatabase              = "Scaling"
-	ScalingDown                  = "ScalingDown"
-	ScalingUp                    = "ScalingUp"
-	Successful                   = "Successful"
-	Updating                     = "Updating"
-	Upgrading                    = "Upgrading"
-	UpgradeVersion               = "UpgradeVersion"
-	VerticalScalingDatabase      = "VerticalScaling"
-	VotingExclusionAdded         = "VotingExclusionAdded"
-	VotingExclusionDeleted       = "VotingExclusionDeleted"
-	UpdateStatefulSets           = "UpdateStatefulSets"
-	VolumeExpansion              = "VolumeExpansion"
-	Reconfigure                  = "Reconfigure"
-	UpgradeNodes                 = "UpgradeNodes"
-	RestartNodes                 = "RestartNodes"
-	TLSRemoved                   = "TLSRemoved"
-	TLSAdded                     = "TLSAdded"
-	TLSChanged                   = "TLSChanged"
-	IssuingConditionUpdated      = "IssuingConditionUpdated"
-	CertificateIssuingSuccessful = "CertificateIssuingSuccessful"
-	TLSEnabling                  = "TLSEnabling"
-	Restart                      = "Restart"
-	RestartStatefulSet           = "RestartStatefulSet"
-	CertificateSynced            = "CertificateSynced"
-	Reconciled                   = "Reconciled"
-	RestartStatefulSetPods       = "RestartStatefulSetPods"
+type OpsRequestStatus struct {
+	// Specifies the current phase of the ops request
+	// +optional
+	Phase OpsRequestPhase `json:"phase,omitempty"`
+	// observedGeneration is the most recent generation observed for this resource. It corresponds to the
+	// resource's generation, which is updated on mutation by the API Server.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// Conditions applied to the request, such as approval or denial.
+	// +optional
+	Conditions []kmapi.Condition `json:"conditions,omitempty"`
+	// PausedBackups represents the list of backups that have been paused.
+	// +optional
+	PausedBackups []kmapi.TypedObjectReference `json:"pausedBackups,omitempty"`
+}
 
-	// MongoDB Constants
-	StartingBalancer            = "StartingBalancer"
-	StoppingBalancer            = "StoppingBalancer"
-	UpdateShardImage            = "UpdateShardImage"
-	UpdateStatefulSetResources  = "UpdateStatefulSetResources"
-	UpdateShardResources        = "UpdateShardResources"
-	ScaleDownShard              = "ScaleDownShard"
-	ScaleUpShard                = "ScaleUpShard"
-	UpdateReplicaSetImage       = "UpdateReplicaSetImage"
-	UpdateConfigServerImage     = "UpdateConfigServerImage"
-	UpdateMongosImage           = "UpdateMongosImage"
-	UpdateReplicaSetResources   = "UpdateReplicaSetResources"
-	UpdateConfigServerResources = "UpdateConfigServerResources"
-	UpdateMongosResources       = "UpdateMongosResources"
-	FlushRouterConfig           = "FlushRouterConfig"
-	ScaleDownReplicaSet         = "ScaleDownReplicaSet"
-	ScaleUpReplicaSet           = "ScaleUpReplicaSet"
-	ScaleUpShardReplicas        = "ScaleUpShardReplicas"
-	ScaleDownShardReplicas      = "ScaleDownShardReplicas"
-	ScaleDownConfigServer       = "ScaleDownConfigServer "
-	ScaleUpConfigServer         = "ScaleUpConfigServer "
-	ScaleMongos                 = "ScaleMongos"
-	ReconfigureReplicaset       = "ReconfigureReplicaset"
-	ReconfigureMongos           = "ReconfigureMongos"
-	ReconfigureShard            = "ReconfigureShard"
-	ReconfigureConfigServer     = "ReconfigureConfigServer"
-	UpdateStandaloneImage       = "UpdateStandaloneImage"
-	UpdateStandaloneResources   = "UpdateStandaloneResources"
-	ScaleDownStandalone         = "ScaleDownStandalone"
-	ScaleUpStandalone           = "ScaleUpStandalone"
-	ReconfigureStandalone       = "ReconfigureStandalone"
-	StandaloneVolumeExpansion   = "StandaloneVolumeExpansion"
-	ReplicasetVolumeExpansion   = "ReplicasetVolumeExpansion"
-	ShardVolumeExpansion        = "ShardVolumeExpansion"
-	ConfigServerVolumeExpansion = "ConfigServerVolumeExpansion"
-	RestartStandalone           = "RestartStandalone"
-	RestartReplicaSet           = "RestartReplicaSet"
-	RestartMongos               = "RestartMongos"
-	RestartConfigServer         = "RestartConfigServer"
-	RestartShard                = "RestartShard"
-	DeleteStatefulSets          = "DeleteStatefulSets"
-	DatabaseReady               = "DatabaseReady"
-
-	// Elasticsearch Constant
-	OrphanStatefulSetPods      = "OrphanStatefulSetPods"
-	ReadyStatefulSets          = "ReadyStatefulSets"
-	ScaleMasterNode            = "ScaleMasterNode"
-	ScaleDataNode              = "ScaleDataNode"
-	ScaleDataHotNode           = "ScaleDataHotNode"
-	ScaleDataWarmNode          = "ScaleDataWarmNode"
-	ScaleDataColdNode          = "ScaleDataColdNode"
-	ScaleDataFrozenNode        = "ScaleDataFrozenNode"
-	ScaleDataContentNode       = "ScaleDataContentNode"
-	ScaleMLNode                = "ScaleMLNode"
-	ScaleTransformNode         = "ScaleTransformNode"
-	ScaleCoordinatingNode      = "ScaleCoordinatingNode"
-	ScaleIngestNode            = "ScaleIngestNode"
-	ScaleCombinedNode          = "ScaleCombinedNode"
-	UpdateCombinedNodePVCs     = "UpdateCombinedNodePVCs"
-	UpdateMasterNodePVCs       = "UpdateMasterNodePVCs"
-	UpdateIngestNodePVCs       = "UpdateIngestNodePVCs"
-	UpdateDataNodePVCs         = "UpdateDataNodePVCs"
-	UpdateDataContentNodePVCs  = "UpdateDataContentNodePVCs"
-	UpdateDataHotNodePVCs      = "UpdateDataHotNodePVCs"
-	UpdateDataWarmNodePVCs     = "UpdateDataWarmNodePVCs"
-	UpdateDataColdNodePVCs     = "UpdateDataColdNodePVCs"
-	UpdateDataFrozenNodePVCs   = "UpdateDataFrozenNodePVCs"
-	UpdateMLNodePVCs           = "UpdateMLNodePVCs"
-	UpdateTransformNodePVCs    = "UpdateTransformNodePVCs"
-	UpdateCoordinatingNodePVCs = "UpdateCoordinatingNodePVCs"
-	UpdateElasticsearchCR      = "UpdateElasticsearchCR"
-
-	UpdateNodeResources                = "UpdateNodeResources"
-	UpdateMasterStatefulSetResources   = "UpdateMasterStatefulSetResources"
-	UpdateDataStatefulSetResources     = "UpdateDataStatefulSetResources"
-	UpdateIngestStatefulSetResources   = "UpdateIngestStatefulSetResources"
-	UpdateCombinedStatefulSetResources = "UpdateCombinedStatefulSetResources"
-	UpdateMasterNodeResources          = "UpdateMasterNodeResources"
-	UpdateDataNodeResources            = "UpdateDataNodeResources"
-	UpdateIngestNodeResources          = "UpdateIngestNodeResources"
-	UpdateCombinedNodeResources        = "UpdateCombinedNodeResources"
-	PrepareCustomConfig                = "PrepareCustomConfig"
-	PrepareSecureCustomConfig          = "PrepareSecureCustomConfig"
-	ReconfigureSecurityAdmin           = "ReconfigureSecurityAdmin"
-
-	// Redis Constants
-	PatchedSecret  = "patchedSecret"
-	ConfigKeyRedis = "redis.conf"
-	RedisTLSArg    = "--tls-port 6379"
-	DBReady        = "DBReady"
-	RestartedPods  = "RestartedPods"
-
-	// Stash Constants
-	PauseBackupConfiguration  = "PauseBackupConfiguration"
-	ResumeBackupConfiguration = "ResumeBackupConfiguration"
-	// Postgres Constants
-	UpdatePrimaryPodImage = "UpdatePrimaryImage"
-	UpdateStandbyPodImage = "UpdateStandbyPodImage"
-	// PausePgCoordinator is used when need to pause postgres failover with pg coordinator.
-	// This is useful when we don't want failover for a certain period.
-	PausePgCoordinator = "PausePgCoordinator"
-	// ResumePgCoordinator is used when need to resume postgres failover with pg coordinator.
-	// This is set when we are done with all the process necessary to do failover again.
-	ResumePgCoordinator = "ResumePgCoordinator"
-	// DataDirectoryInitialized condition is used in major upgrade ops request.
-	// In major upgrade we need to initialized new directory wit initDB to run pg_upgrade.
-	DataDirectoryInitialized = "DataDirectoryInitialized"
-	// PgUpgraded is set when pg_upgrade command ran successfully.
-	// This is used in major upgrade.
-	PgUpgraded = "PgUpgraded"
-	// ReplacedDataDirectory condition is used in major upgrade. After pg_upgrade we need to replace old data directory with new one.
-	// after replace data directory successfully set this condition true.
-	ReplacedDataDirectory                   = "ReplacedDataDirectory"
-	PgCoordinatorStatusResumeDefaultPrimary = "ResumeDefaultPrimary"
-	PostgresPrimaryPodReady                 = "PostgresPrimaryPodReady"
-	RestartPrimaryPods                      = "RestartPrimaryPods"
-	RestartStandbyPods                      = "RestartStandbyPods"
-	// TransferLeaderShipToFirstNode is set when we need to set the pod-0 as primary.
-	// This condition is set after pod-0 restart process done.
-	TransferLeaderShipToFirstNode = "TransferPrimaryRoleToDefault"
-	// TransferLeaderShipToFirstNodeBeforeCoordinatorPaused is set when we need to set the pod-0 as primary Before pgcoordinator paused
-	// This is the initial step where we need to set pod-0 as primary. the condition is set before the pod-0 restart process.
-	TransferLeaderShipToFirstNodeBeforeCoordinatorPaused = "TransferLeaderShipToFirstNodeBeforeCoordinatorPaused"
-	// CopiedOldBinaries condition is used when we are done copying old postgres binary.
-	// This is needed when we are doing major upgrade.
-	CopiedOldBinaries      = "CopiedOldBinaries"
-	UpdateStatefulSetImage = "UpdateStatefulSetImage"
-	// ResumePrimaryPgCoordinator condition is set when we have set pg-coordinator status to NonTranferableResume this is useful when primary need to run after restart.
-	ResumePrimaryPgCoordinator = "NonTransferableResumePgCoordinator"
-
-	ReconfigurePrimaryPod  = "ReconfigurePrimaryPod"
-	ReconfigureStandbyPods = "ReconfigureStandbyPods"
-
-	// MySQL/MariaDB Constants
-	TempIniFilesPath = "/tmp/kubedb-custom-ini-files"
-)
-
-// +kubebuilder:validation:Enum=Pending;Progressing;Successful;WaitingForApproval;Failed;Approved;Denied
+// +kubebuilder:validation:Enum=Pending;Progressing;Successful;WaitingForApproval;Failed;Approved;Denied;Skipped
 type OpsRequestPhase string
 
 const (
@@ -209,38 +49,19 @@ const (
 	OpsRequestPhaseProgressing OpsRequestPhase = "Progressing"
 	// used for ops requests that are executed successfully
 	OpsRequestPhaseSuccessful OpsRequestPhase = "Successful"
-	// used for ops requests that are waiting for approval
-	OpsRequestPhaseWaitingForApproval OpsRequestPhase = "WaitingForApproval"
 	// used for ops requests that are failed
 	OpsRequestPhaseFailed OpsRequestPhase = "Failed"
+	// used for ops requests that are skipped
+	OpsRequestPhaseSkipped OpsRequestPhase = "Skipped"
+
+	// Approval-related Phases
+
+	// used for ops requests that are waiting for approval
+	OpsRequestPhaseWaitingForApproval OpsRequestPhase = "WaitingForApproval"
 	// used for ops requests that are approved
 	OpsRequestApproved OpsRequestPhase = "Approved"
 	// used for ops requests that are denied
 	OpsRequestDenied OpsRequestPhase = "Denied"
-)
-
-// +kubebuilder:validation:Enum=Upgrade;UpdateVersion;HorizontalScaling;VerticalScaling;VolumeExpansion;Restart;Reconfigure;ReconfigureTLS;Reprovision
-type OpsRequestType string
-
-const (
-	// Deprecated. Use UpdateVersion
-	OpsRequestTypeUpgrade OpsRequestType = "Upgrade"
-	// used for UpdateVersion operation
-	OpsRequestTypeUpdateVersion OpsRequestType = "UpdateVersion"
-	// used for HorizontalScaling operation
-	OpsRequestTypeHorizontalScaling OpsRequestType = "HorizontalScaling"
-	// used for VerticalScaling operation
-	OpsRequestTypeVerticalScaling OpsRequestType = "VerticalScaling"
-	// used for VolumeExpansion operation
-	OpsRequestTypeVolumeExpansion OpsRequestType = "VolumeExpansion"
-	// used for Restart operation
-	OpsRequestTypeRestart OpsRequestType = "Restart"
-	// used for Reconfigure operation
-	OpsRequestTypeReconfigure OpsRequestType = "Reconfigure"
-	// used for ReconfigureTLS operation
-	OpsRequestTypeReconfigureTLSs OpsRequestType = "ReconfigureTLS"
-	// used for Reprovision operation
-	OpsRequestTypeReprovision OpsRequestType = "Reprovision"
 )
 
 // +kubebuilder:validation:Enum=Offline;Online
@@ -269,4 +90,56 @@ type TLSSpec struct {
 	// Remove tells operator to remove TLS configuration
 	// +optional
 	Remove bool `json:"remove,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=IfReady;Always
+type ApplyOption string
+
+const (
+	ApplyOptionIfReady ApplyOption = "IfReady"
+	ApplyOptionAlways  ApplyOption = "Always"
+)
+
+type Accessor interface {
+	GetObjectMeta() metav1.ObjectMeta
+	GetDBRefName() string
+	GetRequestType() any
+	GetStatus() OpsRequestStatus
+	SetStatus(_ OpsRequestStatus)
+}
+
+// +kubebuilder:validation:Enum=ConfigureArchiver;DisableArchiver
+type ArchiverOperation string
+
+const (
+	ArchiverOperationConfigure ArchiverOperation = "ConfigureArchiver"
+	ArchiverOperationDisable   ArchiverOperation = "DisableArchiver"
+)
+
+type ArchiverOptions struct {
+	Operation ArchiverOperation     `json:"operation"`
+	Ref       kmapi.ObjectReference `json:"ref"`
+}
+
+// ContainerResources is the spec for vertical scaling of containers
+type ContainerResources struct {
+	// Compute Resources required by the sidecar container.
+	// +optional
+	Resources core.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// PodResources is the spec for vertical scaling of pods
+type PodResources struct {
+	// +optional
+	NodeSelectionPolicy nodemeta.NodeSelectionPolicy `json:"nodeSelectionPolicy,omitempty"`
+	Topology            *Topology                    `json:"topology,omitempty"`
+	// Compute Resources required by the sidecar container.
+	// +optional
+	Resources core.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// Topology is the spec for placement of pods onto nodes
+type Topology struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }

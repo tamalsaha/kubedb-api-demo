@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+
 	v1alpha1 "kubedb.dev/apimachinery/apis/ops/v1alpha1"
 	"kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 
@@ -29,6 +31,7 @@ type OpsV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ElasticsearchOpsRequestsGetter
 	EtcdOpsRequestsGetter
+	KafkaOpsRequestsGetter
 	MariaDBOpsRequestsGetter
 	MemcachedOpsRequestsGetter
 	MongoDBOpsRequestsGetter
@@ -37,7 +40,9 @@ type OpsV1alpha1Interface interface {
 	PgBouncerOpsRequestsGetter
 	PostgresOpsRequestsGetter
 	ProxySQLOpsRequestsGetter
+	RabbitMQOpsRequestsGetter
 	RedisOpsRequestsGetter
+	RedisSentinelOpsRequestsGetter
 }
 
 // OpsV1alpha1Client is used to interact with features provided by the ops.kubedb.com group.
@@ -51,6 +56,10 @@ func (c *OpsV1alpha1Client) ElasticsearchOpsRequests(namespace string) Elasticse
 
 func (c *OpsV1alpha1Client) EtcdOpsRequests(namespace string) EtcdOpsRequestInterface {
 	return newEtcdOpsRequests(c, namespace)
+}
+
+func (c *OpsV1alpha1Client) KafkaOpsRequests(namespace string) KafkaOpsRequestInterface {
+	return newKafkaOpsRequests(c, namespace)
 }
 
 func (c *OpsV1alpha1Client) MariaDBOpsRequests(namespace string) MariaDBOpsRequestInterface {
@@ -85,17 +94,41 @@ func (c *OpsV1alpha1Client) ProxySQLOpsRequests(namespace string) ProxySQLOpsReq
 	return newProxySQLOpsRequests(c, namespace)
 }
 
+func (c *OpsV1alpha1Client) RabbitMQOpsRequests(namespace string) RabbitMQOpsRequestInterface {
+	return newRabbitMQOpsRequests(c, namespace)
+}
+
 func (c *OpsV1alpha1Client) RedisOpsRequests(namespace string) RedisOpsRequestInterface {
 	return newRedisOpsRequests(c, namespace)
 }
 
+func (c *OpsV1alpha1Client) RedisSentinelOpsRequests(namespace string) RedisSentinelOpsRequestInterface {
+	return newRedisSentinelOpsRequests(c, namespace)
+}
+
 // NewForConfig creates a new OpsV1alpha1Client for the given config.
+// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
+// where httpClient was generated with rest.HTTPClientFor(c).
 func NewForConfig(c *rest.Config) (*OpsV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
 	}
-	client, err := rest.RESTClientFor(&config)
+	httpClient, err := rest.HTTPClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return NewForConfigAndClient(&config, httpClient)
+}
+
+// NewForConfigAndClient creates a new OpsV1alpha1Client for the given config and http client.
+// Note the http client provided takes precedence over the configured transport values.
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*OpsV1alpha1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha2
 
 import (
+	"net/http"
+
 	v1alpha2 "kubedb.dev/apimachinery/apis/kubedb/v1alpha2"
 	"kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 
@@ -27,23 +29,36 @@ import (
 
 type KubedbV1alpha2Interface interface {
 	RESTClient() rest.Interface
+	DruidsGetter
 	ElasticsearchesGetter
 	EtcdsGetter
+	FerretDBsGetter
+	KafkasGetter
+	MSSQLServersGetter
 	MariaDBsGetter
 	MemcachedsGetter
 	MongoDBsGetter
 	MySQLsGetter
 	PerconaXtraDBsGetter
 	PgBouncersGetter
+	PgpoolsGetter
 	PostgresesGetter
 	ProxySQLsGetter
+	RabbitMQsGetter
 	RedisesGetter
 	RedisSentinelsGetter
+	SinglestoresGetter
+	SolrsGetter
+	ZooKeepersGetter
 }
 
 // KubedbV1alpha2Client is used to interact with features provided by the kubedb.com group.
 type KubedbV1alpha2Client struct {
 	restClient rest.Interface
+}
+
+func (c *KubedbV1alpha2Client) Druids(namespace string) DruidInterface {
+	return newDruids(c, namespace)
 }
 
 func (c *KubedbV1alpha2Client) Elasticsearches(namespace string) ElasticsearchInterface {
@@ -52,6 +67,18 @@ func (c *KubedbV1alpha2Client) Elasticsearches(namespace string) ElasticsearchIn
 
 func (c *KubedbV1alpha2Client) Etcds(namespace string) EtcdInterface {
 	return newEtcds(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) FerretDBs(namespace string) FerretDBInterface {
+	return newFerretDBs(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) Kafkas(namespace string) KafkaInterface {
+	return newKafkas(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) MSSQLServers(namespace string) MSSQLServerInterface {
+	return newMSSQLServers(c, namespace)
 }
 
 func (c *KubedbV1alpha2Client) MariaDBs(namespace string) MariaDBInterface {
@@ -78,12 +105,20 @@ func (c *KubedbV1alpha2Client) PgBouncers(namespace string) PgBouncerInterface {
 	return newPgBouncers(c, namespace)
 }
 
+func (c *KubedbV1alpha2Client) Pgpools(namespace string) PgpoolInterface {
+	return newPgpools(c, namespace)
+}
+
 func (c *KubedbV1alpha2Client) Postgreses(namespace string) PostgresInterface {
 	return newPostgreses(c, namespace)
 }
 
 func (c *KubedbV1alpha2Client) ProxySQLs(namespace string) ProxySQLInterface {
 	return newProxySQLs(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) RabbitMQs(namespace string) RabbitMQInterface {
+	return newRabbitMQs(c, namespace)
 }
 
 func (c *KubedbV1alpha2Client) Redises(namespace string) RedisInterface {
@@ -94,13 +129,41 @@ func (c *KubedbV1alpha2Client) RedisSentinels(namespace string) RedisSentinelInt
 	return newRedisSentinels(c, namespace)
 }
 
+func (c *KubedbV1alpha2Client) Singlestores(namespace string) SinglestoreInterface {
+	return newSinglestores(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) Solrs(namespace string) SolrInterface {
+	return newSolrs(c, namespace)
+}
+
+func (c *KubedbV1alpha2Client) ZooKeepers(namespace string) ZooKeeperInterface {
+	return newZooKeepers(c, namespace)
+}
+
 // NewForConfig creates a new KubedbV1alpha2Client for the given config.
+// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
+// where httpClient was generated with rest.HTTPClientFor(c).
 func NewForConfig(c *rest.Config) (*KubedbV1alpha2Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
 	}
-	client, err := rest.RESTClientFor(&config)
+	httpClient, err := rest.HTTPClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return NewForConfigAndClient(&config, httpClient)
+}
+
+// NewForConfigAndClient creates a new KubedbV1alpha2Client for the given config and http client.
+// Note the http client provided takes precedence over the configured transport values.
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*KubedbV1alpha2Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

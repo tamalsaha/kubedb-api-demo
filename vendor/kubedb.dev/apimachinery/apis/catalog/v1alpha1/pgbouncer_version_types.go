@@ -38,7 +38,7 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=pgbouncerversions,singular=pgbouncerversion,scope=Cluster,shortName=pbversion,categories={datastore,kubedb,appscode}
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
-// +kubebuilder:printcolumn:name="SERVER_IMAGE",type="string",JSONPath=".spec.server.image"
+// +kubebuilder:printcolumn:name="PGBOUNCER_IMAGE",type="string",JSONPath=".spec.pgBouncer.image"
 // +kubebuilder:printcolumn:name="Deprecated",type="boolean",JSONPath=".spec.deprecated"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PgBouncerVersion struct {
@@ -52,20 +52,30 @@ type PgBouncerVersionSpec struct {
 	// Version
 	Version string `json:"version"`
 	// Database Image
-	Server PgBouncerServerVersion `json:"server"`
+	PgBouncer PgBouncerVersionDatabase `json:"pgBouncer"`
 	// Exporter Image
 	Exporter PgBouncerVersionExporter `json:"exporter"`
 	// Deprecated versions usable but regarded as obsolete and best avoided, typically due to having been superseded.
 	// +optional
 	Deprecated bool `json:"deprecated,omitempty"`
+	// SecurityContext is for the additional config for pgbouncer DB container
+	// +optional
+	SecurityContext PgBouncerSecurityContext `json:"securityContext"`
+	// update constraints
+	UpdateConstraints UpdateConstraints `json:"updateConstraints,omitempty"`
 }
 
-// PgBouncerServerVersion is the PgBouncer Database image
-type PgBouncerServerVersion struct {
+// PgBouncerVersionInitContainer is the PgBouncer init container image
+type PgBouncerVersionInitContainer struct {
 	Image string `json:"image"`
 }
 
-// PostgresVersionExporter is the image for the Postgres exporter
+// PgBouncerVersionDatabase is the PgBouncer Database image
+type PgBouncerVersionDatabase struct {
+	Image string `json:"image"`
+}
+
+// PgBouncerVersionExporter is the image for the PgBouncer exporter
 type PgBouncerVersionExporter struct {
 	Image string `json:"image"`
 }
@@ -78,4 +88,13 @@ type PgBouncerVersionList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	// Items is a list of PgBouncerVersion CRD objects
 	Items []PgBouncerVersion `json:"items,omitempty"`
+}
+
+// PgBouncerSecurityContext is the additional features for the PgBouncer
+type PgBouncerSecurityContext struct {
+	// RunAsUser is default UID for the DB container. It is by default 70 for postgres user.
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+
+	// RunAsAnyNonRoot will be true if user can change the default db container user to other than postgres user.
+	RunAsAnyNonRoot bool `json:"runAsAnyNonRoot,omitempty"`
 }

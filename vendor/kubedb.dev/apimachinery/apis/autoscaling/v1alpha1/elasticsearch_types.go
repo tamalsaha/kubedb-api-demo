@@ -17,9 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	opsapi "kubedb.dev/apimachinery/apis/ops/v1alpha1"
+
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -54,66 +55,64 @@ type ElasticsearchAutoscaler struct {
 
 	// status is the current information about the autoscaler.
 	// +optional
-	Status ElasticsearchAutoscalerStatus `json:"status,omitempty"`
+	Status AutoscalerStatus `json:"status,omitempty"`
 }
 
 // ElasticsearchAutoscalerSpec is the specification of the behavior of the autoscaler.
 type ElasticsearchAutoscalerSpec struct {
 	DatabaseRef *core.LocalObjectReference `json:"databaseRef"`
 
+	// This field will be used to control the behaviour of ops-manager
+	OpsRequestOptions *ElasticsearchOpsRequestOptions `json:"opsRequestOptions,omitempty"`
+
 	Compute *ElasticsearchComputeAutoscalerSpec `json:"compute,omitempty"`
 	Storage *ElasticsearchStorageAutoscalerSpec `json:"storage,omitempty"`
 }
 
 type ElasticsearchComputeAutoscalerSpec struct {
-	Node             *ComputeAutoscalerSpec                      `json:"node,omitempty"`
-	Topology         *ElasticsearchComputeTopologyAutoscalerSpec `json:"topology,omitempty"`
-	DisableScaleDown bool                                        `json:"disableScaleDown,omitempty"`
-}
+	// +optional
+	NodeTopology *NodeTopology `json:"nodeTopology,omitempty"`
 
-type ElasticsearchComputeTopologyAutoscalerSpec struct {
-	Master *ComputeAutoscalerSpec `json:"master,omitempty"`
-	Data   *ComputeAutoscalerSpec `json:"data,omitempty"`
-	Ingest *ComputeAutoscalerSpec `json:"ingest,omitempty"`
+	Node         *ComputeAutoscalerSpec `json:"node,omitempty"`
+	Master       *ComputeAutoscalerSpec `json:"master,omitempty"`
+	Ingest       *ComputeAutoscalerSpec `json:"ingest,omitempty"`
+	Data         *ComputeAutoscalerSpec `json:"data,omitempty"`
+	DataContent  *ComputeAutoscalerSpec `json:"dataContent,omitempty"`
+	DataHot      *ComputeAutoscalerSpec `json:"dataHot,omitempty"`
+	DataWarm     *ComputeAutoscalerSpec `json:"dataWarm,omitempty"`
+	DataCold     *ComputeAutoscalerSpec `json:"dataCold,omitempty"`
+	DataFrozen   *ComputeAutoscalerSpec `json:"dataFrozen,omitempty"`
+	ML           *ComputeAutoscalerSpec `json:"ml,omitempty"`
+	Transform    *ComputeAutoscalerSpec `json:"transform,omitempty"`
+	Coordinating *ComputeAutoscalerSpec `json:"coordinating,omitempty"`
 }
 
 type ElasticsearchStorageAutoscalerSpec struct {
-	Node     *StorageAutoscalerSpec                      `json:"node,omitempty"`
-	Topology *ElasticsearchStorageTopologyAutoscalerSpec `json:"topology,omitempty"`
+	Node         *StorageAutoscalerSpec `json:"node,omitempty"`
+	Master       *StorageAutoscalerSpec `json:"master,omitempty"`
+	Ingest       *StorageAutoscalerSpec `json:"ingest,omitempty"`
+	Data         *StorageAutoscalerSpec `json:"data,omitempty"`
+	DataContent  *StorageAutoscalerSpec `json:"dataContent,omitempty"`
+	DataHot      *StorageAutoscalerSpec `json:"dataHot,omitempty"`
+	DataWarm     *StorageAutoscalerSpec `json:"dataWarm,omitempty"`
+	DataCold     *StorageAutoscalerSpec `json:"dataCold,omitempty"`
+	DataFrozen   *StorageAutoscalerSpec `json:"dataFrozen,omitempty"`
+	ML           *StorageAutoscalerSpec `json:"ml,omitempty"`
+	Transform    *StorageAutoscalerSpec `json:"transform,omitempty"`
+	Coordinating *StorageAutoscalerSpec `json:"coordinating,omitempty"`
 }
 
-type ElasticsearchStorageTopologyAutoscalerSpec struct {
-	Master *StorageAutoscalerSpec `json:"master,omitempty"`
-	Data   *StorageAutoscalerSpec `json:"data,omitempty"`
-	Ingest *StorageAutoscalerSpec `json:"ingest,omitempty"`
+type ElasticsearchOpsRequestOptions struct {
+	// Specifies the Readiness Criteria
+	ReadinessCriteria *opsapi.ElasticsearchReplicaReadinessCriteria `json:"readinessCriteria,omitempty"`
+
+	// Timeout for each step of the ops request in second. If a step doesn't finish within the specified timeout, the ops request will result in failure.
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// ApplyOption is to control the execution of OpsRequest depending on the database state.
+	// +kubebuilder:default="IfReady"
+	Apply opsapi.ApplyOption `json:"apply,omitempty"`
 }
-
-// ElasticsearchAutoscalerStatus describes the runtime state of the autoscaler.
-type ElasticsearchAutoscalerStatus struct {
-	// observedGeneration is the most recent generation observed by this autoscaler.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions is the set of conditions required for this autoscaler to scale its target,
-	// and indicates whether or not those conditions are met.
-	// +optional
-	// +patchMergeKey=type
-	// +patchStrategy=merge
-	Conditions []kmapi.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-}
-
-// ElasticsearchAutoscalerConditionType are the valid conditions of
-// a ElasticsearchAutoscaler.
-type ElasticsearchAutoscalerConditionType string
-
-var (
-	// ConfigDeprecated indicates that this VPA configuration is deprecated
-	// and will stop being supported soon.
-	ElasticsearchAutoscalerConfigDeprecated ElasticsearchAutoscalerConditionType = "ConfigDeprecated"
-	// ConfigUnsupported indicates that this VPA configuration is unsupported
-	// and recommendations will not be provided for it.
-	ElasticsearchAutoscalerConfigUnsupported ElasticsearchAutoscalerConditionType = "ConfigUnsupported"
-)
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // ElasticsearchAutoscalerList is a list of ElasticsearchAutoscaler objects.

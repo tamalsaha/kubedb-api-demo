@@ -19,6 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+
 	v1alpha1 "kubedb.dev/apimachinery/apis/catalog/v1alpha1"
 	"kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 
@@ -27,22 +29,36 @@ import (
 
 type CatalogV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	DruidVersionsGetter
 	ElasticsearchVersionsGetter
 	EtcdVersionsGetter
+	FerretDBVersionsGetter
+	KafkaConnectorVersionsGetter
+	KafkaVersionsGetter
+	MSSQLServerVersionsGetter
 	MariaDBVersionsGetter
 	MemcachedVersionsGetter
 	MongoDBVersionsGetter
 	MySQLVersionsGetter
 	PerconaXtraDBVersionsGetter
 	PgBouncerVersionsGetter
+	PgpoolVersionsGetter
 	PostgresVersionsGetter
 	ProxySQLVersionsGetter
+	RabbitMQVersionsGetter
 	RedisVersionsGetter
+	SinglestoreVersionsGetter
+	SolrVersionsGetter
+	ZooKeeperVersionsGetter
 }
 
 // CatalogV1alpha1Client is used to interact with features provided by the catalog.kubedb.com group.
 type CatalogV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *CatalogV1alpha1Client) DruidVersions() DruidVersionInterface {
+	return newDruidVersions(c)
 }
 
 func (c *CatalogV1alpha1Client) ElasticsearchVersions() ElasticsearchVersionInterface {
@@ -51,6 +67,22 @@ func (c *CatalogV1alpha1Client) ElasticsearchVersions() ElasticsearchVersionInte
 
 func (c *CatalogV1alpha1Client) EtcdVersions() EtcdVersionInterface {
 	return newEtcdVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) FerretDBVersions() FerretDBVersionInterface {
+	return newFerretDBVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) KafkaConnectorVersions() KafkaConnectorVersionInterface {
+	return newKafkaConnectorVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) KafkaVersions() KafkaVersionInterface {
+	return newKafkaVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) MSSQLServerVersions() MSSQLServerVersionInterface {
+	return newMSSQLServerVersions(c)
 }
 
 func (c *CatalogV1alpha1Client) MariaDBVersions() MariaDBVersionInterface {
@@ -77,6 +109,10 @@ func (c *CatalogV1alpha1Client) PgBouncerVersions() PgBouncerVersionInterface {
 	return newPgBouncerVersions(c)
 }
 
+func (c *CatalogV1alpha1Client) PgpoolVersions() PgpoolVersionInterface {
+	return newPgpoolVersions(c)
+}
+
 func (c *CatalogV1alpha1Client) PostgresVersions() PostgresVersionInterface {
 	return newPostgresVersions(c)
 }
@@ -85,17 +121,49 @@ func (c *CatalogV1alpha1Client) ProxySQLVersions() ProxySQLVersionInterface {
 	return newProxySQLVersions(c)
 }
 
+func (c *CatalogV1alpha1Client) RabbitMQVersions() RabbitMQVersionInterface {
+	return newRabbitMQVersions(c)
+}
+
 func (c *CatalogV1alpha1Client) RedisVersions() RedisVersionInterface {
 	return newRedisVersions(c)
 }
 
+func (c *CatalogV1alpha1Client) SinglestoreVersions() SinglestoreVersionInterface {
+	return newSinglestoreVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) SolrVersions() SolrVersionInterface {
+	return newSolrVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) ZooKeeperVersions() ZooKeeperVersionInterface {
+	return newZooKeeperVersions(c)
+}
+
 // NewForConfig creates a new CatalogV1alpha1Client for the given config.
+// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
+// where httpClient was generated with rest.HTTPClientFor(c).
 func NewForConfig(c *rest.Config) (*CatalogV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
 	}
-	client, err := rest.RESTClientFor(&config)
+	httpClient, err := rest.HTTPClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return NewForConfigAndClient(&config, httpClient)
+}
+
+// NewForConfigAndClient creates a new CatalogV1alpha1Client for the given config and http client.
+// Note the http client provided takes precedence over the configured transport values.
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*CatalogV1alpha1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}

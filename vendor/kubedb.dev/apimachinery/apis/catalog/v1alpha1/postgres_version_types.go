@@ -74,6 +74,12 @@ type PostgresVersionSpec struct {
 	// SecurityContext is for the additional config for postgres DB container
 	// +optional
 	SecurityContext PostgresSecurityContext `json:"securityContext"`
+	// update constraints
+	UpdateConstraints UpdateConstraints `json:"updateConstraints,omitempty"`
+	// +optional
+	GitSyncer GitSyncer `json:"gitSyncer,omitempty"`
+	// Archiver defines the walg & kube-stash-addon related specifications
+	Archiver ArchiverSpec `json:"archiver,omitempty"`
 }
 
 // PostgresVersionInitContainer is the Postgres init container image
@@ -83,7 +89,8 @@ type PostgresVersionInitContainer struct {
 
 // PostgresVersionDatabase is the Postgres Database image
 type PostgresVersionDatabase struct {
-	Image string `json:"image"`
+	Image  string `json:"image"`
+	BaseOS string `json:"baseOS,omitempty"`
 }
 
 // PostgresVersionCoordinator is the Postgres leader elector image

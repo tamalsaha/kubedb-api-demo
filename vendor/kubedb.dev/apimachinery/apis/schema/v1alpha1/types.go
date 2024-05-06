@@ -49,7 +49,7 @@ type ScriptSourceSpec struct {
 
 type SnapshotSourceSpec struct {
 	Repository kmapi.TypedObjectReference `json:"repository,omitempty"`
-	// +kubebuilder:default:="latest"
+	// +kubebuilder:default="latest"
 	SnapshotID string `json:"snapshotID,omitempty"`
 }
 
@@ -83,8 +83,3 @@ type VaultSecretEngineRole struct {
 
 // +kubebuilder:validation:Enum=Pending;InProgress;Terminating;Current;Failed;Expired
 type DatabaseSchemaPhase string
-
-type (
-	DatabaseSchemaConditionType string
-	DatabaseSchemaMessage       string
-)

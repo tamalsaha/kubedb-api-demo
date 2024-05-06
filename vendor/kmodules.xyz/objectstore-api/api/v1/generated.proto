@@ -24,7 +24,7 @@ package kmodules.xyz.objectstore_api.api.v1;
 import "k8s.io/api/core/v1/generated.proto";
 
 // Package-wide variables from generator "generated".
-option go_package = "v1";
+option go_package = "kmodules.xyz/objectstore-api/api/v1";
 
 message AzureSpec {
   optional string container = 1;
@@ -88,6 +88,8 @@ message S3Spec {
   optional string prefix = 3;
 
   optional string region = 4;
+
+  optional bool insecureTLS = 5;
 }
 
 message SwiftSpec {

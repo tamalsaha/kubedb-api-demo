@@ -26,6 +26,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -71,7 +72,7 @@ func (in *MySQLDatabase) Default() {
 var _ webhook.Validator = &MySQLDatabase{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (in *MySQLDatabase) ValidateCreate() error {
+func (in *MySQLDatabase) ValidateCreate() (admission.Warnings, error) {
 	mysqldatabaselog.Info("validate create", "name", in.Name)
 	var allErrs field.ErrorList
 	//if in.Spec.Database.Config.ReadOnly == 1 { //todo handle this case if possible
@@ -81,16 +82,16 @@ func (in *MySQLDatabase) ValidateCreate() error {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(""), in.Name, err.Error()))
 	}
 	if len(allErrs) == 0 {
-		return nil
+		return nil, nil
 	}
-	return apierrors.NewInvalid(schema.GroupKind{Group: "schema.kubedb.com", Kind: "MySQLDatabase"}, in.Name, allErrs)
+	return nil, apierrors.NewInvalid(schema.GroupKind{Group: "schema.kubedb.com", Kind: "MySQLDatabase"}, in.Name, allErrs)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (in *MySQLDatabase) ValidateUpdate(old runtime.Object) error {
+func (in *MySQLDatabase) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	mysqldatabaselog.Info("validate update", "name", in.Name)
 	oldobj := old.(*MySQLDatabase)
-	return ValidateMySQLDatabaseUpdate(in, oldobj)
+	return nil, ValidateMySQLDatabaseUpdate(in, oldobj)
 }
 
 func ValidateMySQLDatabaseUpdate(newobj *MySQLDatabase, oldobj *MySQLDatabase) error {
@@ -136,15 +137,15 @@ func ValidateMySQLDatabaseUpdate(newobj *MySQLDatabase, oldobj *MySQLDatabase) e
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (in *MySQLDatabase) ValidateDelete() error {
+func (in *MySQLDatabase) ValidateDelete() (admission.Warnings, error) {
 	mysqldatabaselog.Info("validate delete", "name", in.Name)
 	if in.Spec.DeletionPolicy == DeletionPolicyDoNotDelete {
-		return field.Invalid(field.NewPath("spec").Child("terminationPolicy"), in.Name, `cannot delete object when terminationPolicy is set to "DoNotDelete"`)
+		return nil, field.Invalid(field.NewPath("spec").Child("terminationPolicy"), in.Name, `cannot delete object when terminationPolicy is set to "DoNotDelete"`)
 	}
 	if in.Spec.Database.Config.ReadOnly == 1 {
-		return field.Invalid(field.NewPath("spec").Child("databaseConfig.readOnly"), in.Name, `schema manger cannot be deleted : database is read only enabled`)
+		return nil, field.Invalid(field.NewPath("spec").Child("databaseConfig.readOnly"), in.Name, `schema manger cannot be deleted : database is read only enabled`)
 	}
-	return nil
+	return nil, nil
 }
 
 func (in *MySQLDatabase) ValidateMySQLDatabase() error {
@@ -153,12 +154,6 @@ func (in *MySQLDatabase) ValidateMySQLDatabase() error {
 		allErrs = append(allErrs, err)
 	}
 	if err := in.validateMySQLDatabaseConfig(); err != nil {
-		allErrs = append(allErrs, err)
-	}
-	if err := in.validateMySQLDatabaseNamespace(); err != nil {
-		allErrs = append(allErrs, err)
-	}
-	if err := in.validateMySQLDatabaseName(); err != nil {
 		allErrs = append(allErrs, err)
 	}
 	if len(allErrs) == 0 {
@@ -189,16 +184,16 @@ func (in *MySQLDatabase) validateMySQLDatabaseConfig() *field.Error {
 	if name == "mysql" {
 		return field.Invalid(path, in.Name, `cannot use "mysql" as the database name`)
 	}
-	if name == "kubedb_system" {
+	if name == DatabaseForEntry {
 		return field.Invalid(path, in.Name, `cannot use "kubedb_system" as the database name`)
 	}
 	if name == "information_schema" {
 		return field.Invalid(path, in.Name, `cannot use "information_schema" as the database name`)
 	}
-	if name == "admin" {
+	if name == DatabaseNameAdmin {
 		return field.Invalid(path, in.Name, `cannot use "admin" as the database name`)
 	}
-	if name == "config" {
+	if name == DatabaseNameConfig {
 		return field.Invalid(path, in.Name, `cannot use "config" as the database name`)
 	}
 	path = field.NewPath("spec").Child("database.config")
@@ -215,37 +210,6 @@ func (in *MySQLDatabase) validateMySQLDatabaseConfig() *field.Error {
 				return field.Invalid(path.Child("encryption"), in.Name, `cannot make the database encryption enables , init/restore yet to be applied`)
 			}
 		}
-	}
-	return nil
-}
-
-func (in *MySQLDatabase) validateMySQLDatabaseNamespace() *field.Error {
-	path := field.NewPath("metadata").Child("namespace")
-	ns := in.ObjectMeta.Namespace
-	if ns == "cert-manager" {
-		return field.Invalid(path, in.Name, `cannot use namespace "cert-manager" to create schema manager`)
-	}
-	if ns == "kube-system" {
-		return field.Invalid(path, in.Name, `cannot use namespace "kube-system" to create schema manager`)
-	}
-	if ns == "kubedb-system" {
-		return field.Invalid(path, in.Name, `cannot use namespace "kubedb-system" to create schema manager`)
-	}
-	if ns == "kubedb" {
-		return field.Invalid(path, in.Name, `cannot use namespace "kubedb" to create schema manager`)
-	}
-	if ns == "kubevault" {
-		return field.Invalid(path, in.Name, `cannot use namespace "kubevault" to create schema manager`)
-	}
-	if ns == "local-path-storage" {
-		return field.Invalid(path, in.Name, `cannot use namespace "local-path-storage" to create schema manager`)
-	}
-	return nil
-}
-
-func (in *MySQLDatabase) validateMySQLDatabaseName() *field.Error {
-	if len(in.ObjectMeta.Name) > 45 {
-		return field.Invalid(field.NewPath("metadata").Child("name"), in.Name, "must be no more than 30 characters")
 	}
 	return nil
 }

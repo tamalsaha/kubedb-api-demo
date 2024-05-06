@@ -31,7 +31,7 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path=redissentinels,singular=redissentinel,shortName=rdsentinel,categories={datastore,kubedb,appscode,all}
+// +kubebuilder:resource:path=redissentinels,singular=redissentinel,categories={datastore,kubedb,appscode,all}
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
@@ -44,6 +44,10 @@ type RedisSentinel struct {
 }
 
 type RedisSentinelSpec struct {
+	// AutoOps contains configuration of automatic ops-request-recommendation generation
+	// +optional
+	AutoOps AutoOpsSpec `json:"autoOps,omitempty"`
+
 	// Version of Postgres to be deployed.
 	Version string `json:"version"`
 
@@ -69,7 +73,8 @@ type RedisSentinelSpec struct {
 	Storage *core.PersistentVolumeClaimSpec `json:"storage,omitempty"`
 
 	// Database authentication secret
-	AuthSecret *core.LocalObjectReference `json:"authSecret,omitempty"`
+	// +optional
+	AuthSecret *SecretReference `json:"authSecret,omitempty"`
 
 	// If disable Auth true then don't create any auth secret
 	// +optional
@@ -86,6 +91,11 @@ type RedisSentinelSpec struct {
 	// TerminationPolicy controls the delete operation for database
 	// +optional
 	TerminationPolicy TerminationPolicy `json:"terminationPolicy,omitempty"`
+
+	// HealthChecker defines attributes of the health checker
+	// +optional
+	// +kubebuilder:default={periodSeconds: 10, timeoutSeconds: 10, failureThreshold: 1}
+	HealthChecker kmapi.HealthCheckSpec `json:"healthChecker"`
 }
 
 type RedisSentinelStatus struct {
@@ -99,6 +109,8 @@ type RedisSentinelStatus struct {
 	// Conditions applied to the database, such as approval or denial.
 	// +optional
 	Conditions []kmapi.Condition `json:"conditions,omitempty"`
+	// +optional
+	AuthSecret *Age `json:"authSecret,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

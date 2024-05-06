@@ -20,3 +20,59 @@ package v1alpha1
 type ReplicationModeDetector struct {
 	Image string `json:"image"`
 }
+
+// UpdateConstraints specifies the constraints that need to be considered during version upgrade
+type UpdateConstraints struct {
+	// List of all accepted versions for upgrade request.
+	// An empty list indicates all versions are accepted except the denylist.
+	Allowlist []string `json:"allowlist,omitempty"`
+	// List of all rejected versions for upgrade request.
+	// An empty list indicates no version is rejected.
+	Denylist []string `json:"denylist,omitempty"`
+}
+
+type ArchiverSpec struct {
+	Walg  WalgSpec  `json:"walg,omitempty"`
+	Addon AddonSpec `json:"addon,omitempty"`
+}
+
+type WalgSpec struct {
+	Image string `json:"image"`
+}
+
+type AddonSpec struct {
+	Name  AddonType  `json:"name,omitempty"`
+	Tasks AddonTasks `json:"tasks,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=mongodb-addon;postgres-addon;mysql-addon;mariadb-addon
+type AddonType string
+
+type AddonTasks struct {
+	VolumeSnapshot  VolumeSnapshot  `json:"volumeSnapshot,omitempty"`
+	ManifestBackup  ManifestBackup  `json:"manifestBackup,omitempty"`
+	ManifestRestore ManifestRestore `json:"manifestRestore,omitempty"`
+}
+
+type VolumeSnapshot struct {
+	Name string `json:"name"`
+}
+
+type ManifestBackup struct {
+	Name string `json:"name"`
+}
+
+type ManifestRestore struct {
+	Name string `json:"name"`
+}
+
+// GitSyncer is the image for the kubernetes/git-sync
+// https://github.com/kubernetes/git-sync
+type GitSyncer struct {
+	Image string `json:"image"`
+}
+
+// SecurityContext is for the additional config for the DB container
+type SecurityContext struct {
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+}

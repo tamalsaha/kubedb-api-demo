@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//go:generate go-enum --mustparse --names --values
 package v1alpha1
 
 import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -45,8 +45,8 @@ const (
 type ElasticsearchOpsRequest struct {
 	metav1.TypeMeta   `json:",inline,omitempty"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              ElasticsearchOpsRequestSpec   `json:"spec,omitempty"`
-	Status            ElasticsearchOpsRequestStatus `json:"status,omitempty"`
+	Spec              ElasticsearchOpsRequestSpec `json:"spec,omitempty"`
+	Status            OpsRequestStatus            `json:"status,omitempty"`
 }
 
 // ElasticsearchOpsRequestSpec is the spec for ElasticsearchOpsRequest
@@ -54,9 +54,9 @@ type ElasticsearchOpsRequestSpec struct {
 	// Specifies the Elasticsearch reference
 	DatabaseRef core.LocalObjectReference `json:"databaseRef"`
 	// Specifies the ops request type: Upgrade, HorizontalScaling, VerticalScaling etc.
-	Type OpsRequestType `json:"type"`
+	Type ElasticsearchOpsRequestType `json:"type"`
 	// Specifies information necessary for upgrading Elasticsearch
-	Upgrade *ElasticsearchUpgradeSpec `json:"upgrade,omitempty"`
+	UpdateVersion *ElasticsearchUpdateVersionSpec `json:"updateVersion,omitempty"`
 	// Specifies information necessary for horizontal scaling
 	HorizontalScaling *ElasticsearchHorizontalScalingSpec `json:"horizontalScaling,omitempty"`
 	// Specifies information necessary for vertical scaling
@@ -71,9 +71,19 @@ type ElasticsearchOpsRequestSpec struct {
 	Restart *RestartSpec `json:"restart,omitempty"`
 	// Timeout for each step of the ops request in second. If a step doesn't finish within the specified timeout, the ops request will result in failure.
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// ApplyOption is to control the execution of OpsRequest depending on the database state.
+	// +kubebuilder:default="IfReady"
+	Apply ApplyOption `json:"apply,omitempty"`
 }
 
-type ElasticsearchUpgradeSpec struct {
+// +kubebuilder:validation:Enum=Upgrade;UpdateVersion;HorizontalScaling;VerticalScaling;VolumeExpansion;Restart;Reconfigure;ReconfigureTLS
+// ENUM(UpdateVersion, HorizontalScaling, VerticalScaling, VolumeExpansion, Restart, Reconfigure, ReconfigureTLS)
+type ElasticsearchOpsRequestType string
+
+// ElasticsearchReplicaReadinessCriteria is the criteria for checking readiness of an Elasticsearch database
+type ElasticsearchReplicaReadinessCriteria struct{}
+
+type ElasticsearchUpdateVersionSpec struct {
 	// Specifies the target version name from catalog
 	TargetVersion string `json:"targetVersion,omitempty"`
 }
@@ -107,40 +117,27 @@ type ElasticsearchHorizontalScalingTopologySpec struct {
 // ElasticsearchVerticalScalingSpec is the spec for Elasticsearch vertical scaling
 type ElasticsearchVerticalScalingSpec struct {
 	// Resource spec for combined nodes
-	Node *core.ResourceRequirements `json:"node,omitempty"`
+	Node *PodResources `json:"node,omitempty"`
 	// Resource spec for exporter sidecar
-	Exporter *core.ResourceRequirements `json:"exporter,omitempty"`
-	// Specifies the resource spec for cluster in topology mode
-	Topology *ElasticsearchVerticalScalingTopologySpec `json:"topology,omitempty"`
-}
-
-// ElasticsearchVerticalScalingTopologySpec is the resource spec in the cluster topology mode
-type ElasticsearchVerticalScalingTopologySpec struct {
-	Master       *core.ResourceRequirements `json:"master,omitempty"`
-	Ingest       *core.ResourceRequirements `json:"ingest,omitempty"`
-	Data         *core.ResourceRequirements `json:"data,omitempty"`
-	DataContent  *core.ResourceRequirements `json:"dataContent,omitempty"`
-	DataHot      *core.ResourceRequirements `json:"dataHot,omitempty"`
-	DataWarm     *core.ResourceRequirements `json:"dataWarm,omitempty"`
-	DataCold     *core.ResourceRequirements `json:"dataCold,omitempty"`
-	DataFrozen   *core.ResourceRequirements `json:"dataFrozen,omitempty"`
-	ML           *core.ResourceRequirements `json:"ml,omitempty"`
-	Transform    *core.ResourceRequirements `json:"transform,omitempty"`
-	Coordinating *core.ResourceRequirements `json:"coordinating,omitempty"`
+	Exporter     *ContainerResources `json:"exporter,omitempty"`
+	Master       *PodResources       `json:"master,omitempty"`
+	Ingest       *PodResources       `json:"ingest,omitempty"`
+	Data         *PodResources       `json:"data,omitempty"`
+	DataContent  *PodResources       `json:"dataContent,omitempty"`
+	DataHot      *PodResources       `json:"dataHot,omitempty"`
+	DataWarm     *PodResources       `json:"dataWarm,omitempty"`
+	DataCold     *PodResources       `json:"dataCold,omitempty"`
+	DataFrozen   *PodResources       `json:"dataFrozen,omitempty"`
+	ML           *PodResources       `json:"ml,omitempty"`
+	Transform    *PodResources       `json:"transform,omitempty"`
+	Coordinating *PodResources       `json:"coordinating,omitempty"`
 }
 
 // ElasticsearchVolumeExpansionSpec is the spec for Elasticsearch volume expansion
 type ElasticsearchVolumeExpansionSpec struct {
-	// +kubebuilder:default:="Online"
-	Mode *VolumeExpansionMode `json:"mode,omitempty"`
+	Mode VolumeExpansionMode `json:"mode"`
 	// volume specification for combined nodes
 	Node *resource.Quantity `json:"node,omitempty"`
-	// volume specification for nodes in cluster topology
-	Topology *ElasticsearchVolumeExpansionTopologySpec `json:"topology,omitempty"`
-}
-
-// ElasticsearchVolumeExpansionTopologySpec is the spec for Elasticsearch volume expansion in topology mode
-type ElasticsearchVolumeExpansionTopologySpec struct {
 	// volume specification for master nodes
 	Master *resource.Quantity `json:"master,omitempty"`
 	// volume specification for ingest nodes
@@ -194,20 +191,6 @@ type ElasticsearchCustomConfiguration struct {
 	ConfigMap *core.LocalObjectReference `json:"configMap,omitempty"`
 	Data      map[string]string          `json:"data,omitempty"`
 	Remove    bool                       `json:"remove,omitempty"`
-}
-
-// ElasticsearchOpsRequestStatus is the status for ElasticsearchOpsRequest
-type ElasticsearchOpsRequestStatus struct {
-	// Specifies the current phase of the ops request
-	// +optional
-	Phase OpsRequestPhase `json:"phase,omitempty"`
-	// observedGeneration is the most recent generation observed for this resource. It corresponds to the
-	// resource's generation, which is updated on mutation by the API Server.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Conditions applied to the request, such as approval or denial.
-	// +optional
-	Conditions []kmapi.Condition `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

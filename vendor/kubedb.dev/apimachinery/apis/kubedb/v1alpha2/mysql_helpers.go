@@ -20,9 +20,11 @@ import (
 	"fmt"
 
 	"kubedb.dev/apimachinery/apis"
+	"kubedb.dev/apimachinery/apis/catalog/v1alpha1"
 	"kubedb.dev/apimachinery/apis/kubedb"
 	"kubedb.dev/apimachinery/crds"
 
+	promapi "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"gomodules.xyz/pointer"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +34,7 @@ import (
 	"kmodules.xyz/client-go/apiextensions"
 	core_util "kmodules.xyz/client-go/core/v1"
 	meta_util "kmodules.xyz/client-go/meta"
+	"kmodules.xyz/client-go/policy/secomp"
 	appcat "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	ofst "kmodules.xyz/offshoot-api/api/v1"
@@ -39,6 +42,10 @@ import (
 
 func (_ MySQL) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralMySQL))
+}
+
+func (m *MySQL) AsOwner() *metav1.OwnerReference {
+	return metav1.NewControllerRef(m, SchemeGroupVersion.WithKind(ResourceKindMySQL))
 }
 
 var _ apis.ResourceInfo = &MySQL{}
@@ -158,10 +165,10 @@ func (m MySQL) PeerName(idx int) string {
 }
 
 func (m MySQL) GetAuthSecretName() string {
-	if m.Spec.AuthSecret != nil {
+	if m.Spec.AuthSecret != nil && m.Spec.AuthSecret.Name != "" {
 		return m.Spec.AuthSecret.Name
 	}
-	return meta_util.NameWithSuffix(m.Name, "auth")
+	return meta_util.NameWithSuffix(m.OffshootName(), "auth")
 }
 
 type mysqlApp struct {
@@ -212,6 +219,10 @@ func (m mysqlStatsService) Scheme() string {
 	return ""
 }
 
+func (m mysqlStatsService) TLSConfig() *promapi.TLSConfig {
+	return nil
+}
+
 func (m MySQL) StatsService() mona.StatsAccessor {
 	return &mysqlStatsService{&m}
 }
@@ -232,13 +243,19 @@ func (m *MySQL) IsInnoDBCluster() bool {
 		*m.Spec.Topology.Mode == MySQLModeInnoDBCluster
 }
 
-func (m *MySQL) IsReadReplica() bool {
+func (m *MySQL) IsRemoteReplica() bool {
 	return m.Spec.Topology != nil &&
 		m.Spec.Topology.Mode != nil &&
-		*m.Spec.Topology.Mode == MySQLModeReadReplica
+		*m.Spec.Topology.Mode == MySQLModeRemoteReplica
 }
 
-func (m *MySQL) SetDefaults(topology *core_util.Topology) {
+func (m *MySQL) IsSemiSync() bool {
+	return m.Spec.Topology != nil &&
+		m.Spec.Topology.Mode != nil &&
+		*m.Spec.Topology.Mode == MySQLModeSemiSync
+}
+
+func (m *MySQL) SetDefaults(myVersion *v1alpha1.MySQLVersion, topology *core_util.Topology) {
 	if m == nil {
 		return
 	}
@@ -249,9 +266,14 @@ func (m *MySQL) SetDefaults(topology *core_util.Topology) {
 		m.Spec.TerminationPolicy = TerminationPolicyDelete
 	}
 
-	if m.UsesGroupReplication() {
+	if m.UsesGroupReplication() || m.IsInnoDBCluster() || m.IsSemiSync() {
 		if m.Spec.Replicas == nil {
 			m.Spec.Replicas = pointer.Int32P(MySQLDefaultGroupSize)
+		} else {
+			if m.Spec.Coordinator.SecurityContext == nil {
+				m.Spec.Coordinator.SecurityContext = &core.SecurityContext{}
+			}
+			m.assignDefaultContainerSecurityContext(myVersion, m.Spec.Coordinator.SecurityContext)
 		}
 	} else {
 		if m.Spec.Replicas == nil {
@@ -263,10 +285,21 @@ func (m *MySQL) SetDefaults(topology *core_util.Topology) {
 		m.Spec.PodTemplate.Spec.ServiceAccountName = m.OffshootName()
 	}
 
-	m.Spec.Monitor.SetDefaults()
+	m.setDefaultContainerSecurityContext(myVersion, &m.Spec.PodTemplate)
+
 	m.setDefaultAffinity(&m.Spec.PodTemplate, m.OffshootSelectors(), topology)
 	m.SetTLSDefaults()
+	m.SetHealthCheckerDefaults()
 	apis.SetDefaultResourceLimits(&m.Spec.PodTemplate.Spec.Resources, DefaultResources)
+	m.Spec.Monitor.SetDefaults()
+	if m.Spec.Monitor != nil && m.Spec.Monitor.Prometheus != nil {
+		if m.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser == nil {
+			m.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser = myVersion.Spec.SecurityContext.RunAsUser
+		}
+		if m.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup == nil {
+			m.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup = myVersion.Spec.SecurityContext.RunAsUser
+		}
+	}
 }
 
 // setDefaultAffinity
@@ -318,6 +351,18 @@ func (m *MySQL) SetTLSDefaults() {
 	m.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(m.Spec.TLS.Certificates, string(MySQLMetricsExporterCert), m.CertificateName(MySQLMetricsExporterCert))
 }
 
+func (m *MySQL) SetHealthCheckerDefaults() {
+	if m.Spec.HealthChecker.PeriodSeconds == nil {
+		m.Spec.HealthChecker.PeriodSeconds = pointer.Int32P(10)
+	}
+	if m.Spec.HealthChecker.TimeoutSeconds == nil {
+		m.Spec.HealthChecker.TimeoutSeconds = pointer.Int32P(10)
+	}
+	if m.Spec.HealthChecker.FailureThreshold == nil {
+		m.Spec.HealthChecker.FailureThreshold = pointer.Int32P(1)
+	}
+}
+
 func (m *MySQLSpec) GetPersistentSecrets() []string {
 	if m == nil {
 		return nil
@@ -335,18 +380,16 @@ func (m *MySQL) CertificateName(alias MySQLCertificateAlias) string {
 	return meta_util.NameWithSuffix(m.Name, fmt.Sprintf("%s-cert", string(alias)))
 }
 
-// MustCertSecretName returns the secret name for a certificate alias
-func (m *MySQL) MustCertSecretName(alias MySQLCertificateAlias) string {
-	if m == nil {
-		panic("missing MySQL database")
-	} else if m.Spec.TLS == nil {
-		panic(fmt.Errorf("MySQL %s/%s is missing tls spec", m.Namespace, m.Name))
+// GetCertSecretName returns the secret name for a certificate alias if any
+// otherwise returns default certificate secret name for the given alias.
+func (m *MySQL) GetCertSecretName(alias MySQLCertificateAlias) string {
+	if m.Spec.TLS != nil {
+		name, ok := kmapi.GetCertificateSecretName(m.Spec.TLS.Certificates, string(alias))
+		if ok {
+			return name
+		}
 	}
-	name, ok := kmapi.GetCertificateSecretName(m.Spec.TLS.Certificates, string(alias))
-	if !ok {
-		panic(fmt.Errorf("MySQL %s/%s is missing secret name for %s certificate", m.Namespace, m.Name, alias))
-	}
-	return name
+	return m.CertificateName(alias)
 }
 
 func (m *MySQL) ReplicasAreReady(lister appslister.StatefulSetLister) (bool, string, error) {
@@ -378,4 +421,43 @@ func (m *MySQL) MySQLTLSArgs() []string {
 
 func (m *MySQL) GetRouterName() string {
 	return fmt.Sprintf("%s-router", m.Name)
+}
+
+func (m *MySQL) setDefaultContainerSecurityContext(myVersion *v1alpha1.MySQLVersion, podTemplate *ofst.PodTemplateSpec) {
+	if podTemplate == nil {
+		return
+	}
+	if podTemplate.Spec.ContainerSecurityContext == nil {
+		podTemplate.Spec.ContainerSecurityContext = &core.SecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext == nil {
+		podTemplate.Spec.SecurityContext = &core.PodSecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext.FSGroup == nil {
+		podTemplate.Spec.SecurityContext.FSGroup = myVersion.Spec.SecurityContext.RunAsUser
+	}
+	m.assignDefaultContainerSecurityContext(myVersion, podTemplate.Spec.ContainerSecurityContext)
+}
+
+func (m *MySQL) assignDefaultContainerSecurityContext(myVersion *v1alpha1.MySQLVersion, sc *core.SecurityContext) {
+	if sc.AllowPrivilegeEscalation == nil {
+		sc.AllowPrivilegeEscalation = pointer.BoolP(false)
+	}
+	if sc.Capabilities == nil {
+		sc.Capabilities = &core.Capabilities{
+			Drop: []core.Capability{"ALL"},
+		}
+	}
+	if sc.RunAsNonRoot == nil {
+		sc.RunAsNonRoot = pointer.BoolP(true)
+	}
+	if sc.RunAsUser == nil {
+		sc.RunAsUser = myVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.RunAsGroup == nil {
+		sc.RunAsGroup = myVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.SeccompProfile == nil {
+		sc.SeccompProfile = secomp.DefaultSeccompProfile()
+	}
 }

@@ -18,23 +18,35 @@ package v1alpha2
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"kubedb.dev/apimachinery/apis"
+	"kubedb.dev/apimachinery/apis/catalog/v1alpha1"
 	"kubedb.dev/apimachinery/apis/kubedb"
 	"kubedb.dev/apimachinery/crds"
 
+	promapi "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"gomodules.xyz/pointer"
 	core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	appslister "k8s.io/client-go/listers/apps/v1"
+	kmapi "kmodules.xyz/client-go/api/v1"
 	"kmodules.xyz/client-go/apiextensions"
+	core_util "kmodules.xyz/client-go/core/v1"
 	meta_util "kmodules.xyz/client-go/meta"
+	"kmodules.xyz/client-go/policy/secomp"
 	appcat "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
+	ofst "kmodules.xyz/offshoot-api/api/v1"
 )
 
 func (_ PerconaXtraDB) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralPerconaXtraDB))
+}
+
+func (p *PerconaXtraDB) AsOwner() *metav1.OwnerReference {
+	return metav1.NewControllerRef(p, SchemeGroupVersion.WithKind(ResourceKindPerconaXtraDB))
 }
 
 var _ apis.ResourceInfo = &PerconaXtraDB{}
@@ -97,10 +109,6 @@ func (p PerconaXtraDB) ServiceName() string {
 	return p.OffshootName()
 }
 
-func (p PerconaXtraDB) IsCluster() bool {
-	return pointer.Int32(p.Spec.Replicas) > 1
-}
-
 func (p PerconaXtraDB) GoverningServiceName() string {
 	return meta_util.NameWithSuffix(p.ServiceName(), "pods")
 }
@@ -110,7 +118,28 @@ func (p PerconaXtraDB) PeerName(idx int) string {
 }
 
 func (p PerconaXtraDB) GetAuthSecretName() string {
-	return p.Spec.AuthSecret.Name
+	if p.Spec.AuthSecret != nil && p.Spec.AuthSecret.Name != "" {
+		return p.Spec.AuthSecret.Name
+	}
+	return meta_util.NameWithSuffix(p.OffshootName(), "auth")
+}
+
+func (p PerconaXtraDB) GetReplicationSecretName() string {
+	if p.Spec.SystemUserSecrets != nil &&
+		p.Spec.SystemUserSecrets.ReplicationUserSecret != nil &&
+		p.Spec.SystemUserSecrets.ReplicationUserSecret.Name != "" {
+		return p.Spec.SystemUserSecrets.ReplicationUserSecret.Name
+	}
+	return meta_util.NameWithSuffix(p.OffshootName(), "replication")
+}
+
+func (p PerconaXtraDB) GetMonitorSecretName() string {
+	if p.Spec.SystemUserSecrets != nil &&
+		p.Spec.SystemUserSecrets.MonitorUserSecret != nil &&
+		p.Spec.SystemUserSecrets.MonitorUserSecret.Name != "" {
+		return p.Spec.SystemUserSecrets.MonitorUserSecret.Name
+	}
+	return meta_util.NameWithSuffix(p.OffshootName(), "monitor")
 }
 
 func (p PerconaXtraDB) ClusterName() string {
@@ -161,6 +190,10 @@ func (p perconaXtraDBStatsService) Scheme() string {
 	return ""
 }
 
+func (p perconaXtraDBStatsService) TLSConfig() *promapi.TLSConfig {
+	return nil
+}
+
 func (p PerconaXtraDB) StatsService() mona.StatsAccessor {
 	return &perconaXtraDBStatsService{&p}
 }
@@ -169,13 +202,17 @@ func (p PerconaXtraDB) StatsServiceLabels() map[string]string {
 	return p.ServiceLabels(StatsServiceAlias, map[string]string{LabelRole: RoleStats})
 }
 
-func (p *PerconaXtraDB) SetDefaults() {
+func (p PerconaXtraDB) PrimaryServiceDNS() string {
+	return fmt.Sprintf("%s.%s.svc", p.ServiceName(), p.Namespace)
+}
+
+func (p *PerconaXtraDB) SetDefaults(pVersion *v1alpha1.PerconaXtraDBVersion, topology *core_util.Topology) {
 	if p == nil {
 		return
 	}
 
 	if p.Spec.Replicas == nil {
-		p.Spec.Replicas = pointer.Int32P(1)
+		p.Spec.Replicas = pointer.Int32P(PerconaXtraDBDefaultClusterSize)
 	}
 
 	if p.Spec.StorageType == "" {
@@ -185,53 +222,130 @@ func (p *PerconaXtraDB) SetDefaults() {
 		p.Spec.TerminationPolicy = TerminationPolicyDelete
 	}
 
-	p.Spec.setDefaultProbes()
-	p.Spec.Monitor.SetDefaults()
+	if p.Spec.PodTemplate.Spec.ServiceAccountName == "" {
+		p.Spec.PodTemplate.Spec.ServiceAccountName = p.OffshootName()
+	}
+
+	// Need to set FSGroup equal to  p.Spec.PodTemplate.Spec.ContainerSecurityContext.RunAsGroup.
+	// So that /var/pv directory have the group permission for the RunAsGroup user GID.
+	// Otherwise, We will get write permission denied.
+	p.setDefaultContainerSecurityContext(pVersion, &p.Spec.PodTemplate)
+
+	p.setDefaultAffinity(&p.Spec.PodTemplate, p.OffshootSelectors(), topology)
+	p.SetTLSDefaults()
 	apis.SetDefaultResourceLimits(&p.Spec.PodTemplate.Spec.Resources, DefaultResources)
+	p.Spec.Monitor.SetDefaults()
+	if p.Spec.Monitor != nil && p.Spec.Monitor.Prometheus != nil {
+		if p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser == nil {
+			p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsUser = pVersion.Spec.SecurityContext.RunAsUser
+		}
+		if p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup == nil {
+			p.Spec.Monitor.Prometheus.Exporter.SecurityContext.RunAsGroup = pVersion.Spec.SecurityContext.RunAsUser
+		}
+	}
 }
 
-// setDefaultProbes sets defaults only when probe fields are nil.
-// In operator, check if the value of probe fields is "{}".
-// For "{}", ignore readinessprobe or livenessprobe in statefulset.
-// Ref: https://github.com/mattlord/Docker-InnoDB-Cluster/blob/master/healthcheck.sh#L10
-func (p *PerconaXtraDBSpec) setDefaultProbes() {
-	if p == nil {
+func (p *PerconaXtraDB) setDefaultContainerSecurityContext(pVersion *v1alpha1.PerconaXtraDBVersion, podTemplate *ofst.PodTemplateSpec) {
+	if podTemplate == nil {
+		return
+	}
+	if podTemplate.Spec.ContainerSecurityContext == nil {
+		podTemplate.Spec.ContainerSecurityContext = &core.SecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext == nil {
+		podTemplate.Spec.SecurityContext = &core.PodSecurityContext{}
+	}
+	if podTemplate.Spec.SecurityContext.FSGroup == nil {
+		podTemplate.Spec.SecurityContext.FSGroup = pVersion.Spec.SecurityContext.RunAsUser
+	}
+	p.assignDefaultContainerSecurityContext(pVersion, podTemplate.Spec.ContainerSecurityContext)
+}
+
+func (p *PerconaXtraDB) assignDefaultContainerSecurityContext(pVersion *v1alpha1.PerconaXtraDBVersion, sc *core.SecurityContext) {
+	if sc.AllowPrivilegeEscalation == nil {
+		sc.AllowPrivilegeEscalation = pointer.BoolP(false)
+	}
+	if sc.Capabilities == nil {
+		sc.Capabilities = &core.Capabilities{
+			Drop: []core.Capability{"ALL"},
+		}
+	}
+	if sc.RunAsNonRoot == nil {
+		sc.RunAsNonRoot = pointer.BoolP(true)
+	}
+	if sc.RunAsUser == nil {
+		sc.RunAsUser = pVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.RunAsGroup == nil {
+		sc.RunAsGroup = pVersion.Spec.SecurityContext.RunAsUser
+	}
+	if sc.SeccompProfile == nil {
+		sc.SeccompProfile = secomp.DefaultSeccompProfile()
+	}
+}
+
+// setDefaultAffinity
+func (p *PerconaXtraDB) setDefaultAffinity(podTemplate *ofst.PodTemplateSpec, labels map[string]string, topology *core_util.Topology) {
+	if podTemplate == nil {
+		return
+	} else if podTemplate.Spec.Affinity != nil {
+		// Update topologyKey fields according to Kubernetes version
+		topology.ConvertAffinity(podTemplate.Spec.Affinity)
 		return
 	}
 
-	var readynessProbeCmd []string
-	if pointer.Int32(p.Replicas) > 1 {
-		readynessProbeCmd = []string{
-			"/cluster-check.sh",
-		}
-	} else {
-		readynessProbeCmd = []string{
-			"bash",
-			"-c",
-			`export MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
-ping_resp=$(mysqladmin -uroot ping)
-if [[ "$ping_resp" != "mysqld is alive" ]]; then
-    echo "[ERROR] server is not ready. PING_RESPONSE: $ping_resp"
-    exit 1
-fi
-`,
-		}
-	}
-
-	readinessProbe := &core.Probe{
-		Handler: core.Handler{
-			Exec: &core.ExecAction{
-				Command: readynessProbeCmd,
+	podTemplate.Spec.Affinity = &core.Affinity{
+		PodAntiAffinity: &core.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []core.WeightedPodAffinityTerm{
+				// Prefer to not schedule multiple pods on the same node
+				{
+					Weight: 100,
+					PodAffinityTerm: core.PodAffinityTerm{
+						Namespaces: []string{p.Namespace},
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: labels,
+						},
+						TopologyKey: core.LabelHostname,
+					},
+				},
+				// Prefer to not schedule multiple pods on the node with same zone
+				{
+					Weight: 50,
+					PodAffinityTerm: core.PodAffinityTerm{
+						Namespaces: []string{p.Namespace},
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: labels,
+						},
+						TopologyKey: topology.LabelZone,
+					},
+				},
 			},
 		},
-		InitialDelaySeconds: 30,
-		PeriodSeconds:       10,
-	}
-	if p.PodTemplate.Spec.ReadinessProbe == nil {
-		p.PodTemplate.Spec.ReadinessProbe = readinessProbe
 	}
 }
 
+func (p *PerconaXtraDB) SetHealthCheckerDefaults() {
+	if p.Spec.HealthChecker.PeriodSeconds == nil {
+		p.Spec.HealthChecker.PeriodSeconds = pointer.Int32P(10)
+	}
+	if p.Spec.HealthChecker.TimeoutSeconds == nil {
+		p.Spec.HealthChecker.TimeoutSeconds = pointer.Int32P(10)
+	}
+	if p.Spec.HealthChecker.FailureThreshold == nil {
+		p.Spec.HealthChecker.FailureThreshold = pointer.Int32P(1)
+	}
+}
+
+func (p *PerconaXtraDB) SetTLSDefaults() {
+	if p.Spec.TLS == nil || p.Spec.TLS.IssuerRef == nil {
+		return
+	}
+	p.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(p.Spec.TLS.Certificates, string(PerconaXtraDBServerCert), p.CertificateName(PerconaXtraDBServerCert))
+	p.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(p.Spec.TLS.Certificates, string(PerconaXtraDBClientCert), p.CertificateName(PerconaXtraDBClientCert))
+	p.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(p.Spec.TLS.Certificates, string(PerconaXtraDBExporterCert), p.CertificateName(PerconaXtraDBExporterCert))
+}
+
+// CertificateName returns the default certificate name and/or certificate secret name for a certificate alias
 func (p *PerconaXtraDBSpec) GetPersistentSecrets() []string {
 	if p == nil {
 		return nil
@@ -241,11 +355,42 @@ func (p *PerconaXtraDBSpec) GetPersistentSecrets() []string {
 	if p.AuthSecret != nil {
 		secrets = append(secrets, p.AuthSecret.Name)
 	}
+	if p.SystemUserSecrets != nil && p.SystemUserSecrets.ReplicationUserSecret != nil {
+		secrets = append(secrets, p.SystemUserSecrets.ReplicationUserSecret.Name)
+	}
+	if p.SystemUserSecrets != nil && p.SystemUserSecrets.MonitorUserSecret != nil {
+		secrets = append(secrets, p.SystemUserSecrets.MonitorUserSecret.Name)
+	}
 	return secrets
+}
+
+// CertificateName returns the default certificate name and/or certificate secret name for a certificate alias
+func (p *PerconaXtraDB) CertificateName(alias PerconaXtraDBCertificateAlias) string {
+	return meta_util.NameWithSuffix(p.Name, fmt.Sprintf("%s-cert", string(alias)))
+}
+
+// GetCertSecretName returns the secret name for a certificate alias if any,
+// otherwise returns default certificate secret name for the given alias.
+func (p *PerconaXtraDB) GetCertSecretName(alias PerconaXtraDBCertificateAlias) string {
+	if p.Spec.TLS != nil {
+		name, ok := kmapi.GetCertificateSecretName(p.Spec.TLS.Certificates, string(alias))
+		if ok {
+			return name
+		}
+	}
+	return p.CertificateName(alias)
 }
 
 func (p *PerconaXtraDB) ReplicasAreReady(lister appslister.StatefulSetLister) (bool, string, error) {
 	// Desire number of statefulSets
 	expectedItems := 1
 	return checkReplicas(lister.StatefulSets(p.Namespace), labels.SelectorFromSet(p.OffshootLabels()), expectedItems)
+}
+
+func (p *PerconaXtraDB) CertMountPath(alias PerconaXtraDBCertificateAlias) string {
+	return filepath.Join(PerconaXtraDBCertMountPath, string(alias))
+}
+
+func (p *PerconaXtraDB) CertFilePath(certAlias PerconaXtraDBCertificateAlias, certFileName string) string {
+	return filepath.Join(p.CertMountPath(certAlias), certFileName)
 }

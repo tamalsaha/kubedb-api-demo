@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ MemcachedOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (m MemcachedOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralMemcachedOpsRequest))
 }
 
@@ -54,4 +55,26 @@ func (m MemcachedOpsRequest) ResourcePlural() string {
 
 func (m MemcachedOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &MemcachedOpsRequest{}
+
+func (m *MemcachedOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return m.ObjectMeta
+}
+
+func (m *MemcachedOpsRequest) GetDBRefName() string {
+	return m.Spec.DatabaseRef.Name
+}
+
+func (m *MemcachedOpsRequest) GetRequestType() any {
+	return m.Spec.Type
+}
+
+func (m *MemcachedOpsRequest) GetStatus() OpsRequestStatus {
+	return m.Status
+}
+
+func (m *MemcachedOpsRequest) SetStatus(s OpsRequestStatus) {
+	m.Status = s
 }

@@ -23,10 +23,11 @@ import (
 	"kubedb.dev/apimachinery/apis/ops"
 	"kubedb.dev/apimachinery/crds"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kmodules.xyz/client-go/apiextensions"
 )
 
-func (_ MongoDBOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
+func (m MongoDBOpsRequest) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralMongoDBOpsRequest))
 }
 
@@ -54,4 +55,26 @@ func (m MongoDBOpsRequest) ResourcePlural() string {
 
 func (m MongoDBOpsRequest) ValidateSpecs() error {
 	return nil
+}
+
+var _ Accessor = &MongoDBOpsRequest{}
+
+func (m *MongoDBOpsRequest) GetObjectMeta() metav1.ObjectMeta {
+	return m.ObjectMeta
+}
+
+func (m *MongoDBOpsRequest) GetDBRefName() string {
+	return m.Spec.DatabaseRef.Name
+}
+
+func (m *MongoDBOpsRequest) GetRequestType() any {
+	return m.Spec.Type
+}
+
+func (m *MongoDBOpsRequest) GetStatus() OpsRequestStatus {
+	return m.Status
+}
+
+func (m *MongoDBOpsRequest) SetStatus(s OpsRequestStatus) {
+	m.Status = s
 }

@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//go:generate go-enum --mustparse --names --values
 package v1alpha1
 
 import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -45,8 +45,8 @@ const (
 type MongoDBOpsRequest struct {
 	metav1.TypeMeta   `json:",inline,omitempty"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              MongoDBOpsRequestSpec   `json:"spec,omitempty"`
-	Status            MongoDBOpsRequestStatus `json:"status,omitempty"`
+	Spec              MongoDBOpsRequestSpec `json:"spec,omitempty"`
+	Status            OpsRequestStatus      `json:"status,omitempty"`
 }
 
 // MongoDBOpsRequestSpec is the spec for MongoDBOpsRequest
@@ -54,9 +54,9 @@ type MongoDBOpsRequestSpec struct {
 	// Specifies the MongoDB reference
 	DatabaseRef core.LocalObjectReference `json:"databaseRef"`
 	// Specifies the ops request type: Upgrade, HorizontalScaling, VerticalScaling etc.
-	Type OpsRequestType `json:"type"`
-	// Specifies information necessary for upgrading mongodb
-	Upgrade *MongoDBUpgradeSpec `json:"upgrade,omitempty"`
+	Type MongoDBOpsRequestType `json:"type"`
+	// Specifies information necessary for upgrading MongoDB
+	UpdateVersion *MongoDBUpdateVersionSpec `json:"updateVersion,omitempty"`
 	// Specifies information necessary for horizontal scaling
 	HorizontalScaling *MongoDBHorizontalScalingSpec `json:"horizontalScaling,omitempty"`
 	// Specifies information necessary for vertical scaling
@@ -71,11 +71,21 @@ type MongoDBOpsRequestSpec struct {
 	Restart *RestartSpec `json:"restart,omitempty"`
 	// Specifies information necessary for reprovisioning database
 	Reprovision *Reprovision `json:"reprovision,omitempty"`
+	// Specifies information necessary for setting up Archiver for database
+	Archiver *ArchiverOptions `json:"archiver,omitempty"`
+
 	// Specifies the Readiness Criteria
 	ReadinessCriteria *MongoDBReplicaReadinessCriteria `json:"readinessCriteria,omitempty"`
 	// Timeout for each step of the ops request in second. If a step doesn't finish within the specified timeout, the ops request will result in failure.
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// ApplyOption is to control the execution of OpsRequest depending on the database state.
+	// +kubebuilder:default="IfReady"
+	Apply ApplyOption `json:"apply,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=Upgrade;UpdateVersion;HorizontalScaling;VerticalScaling;VolumeExpansion;Restart;Reconfigure;ReconfigureTLS;Reprovision
+// ENUM(UpdateVersion, HorizontalScaling, VerticalScaling, VolumeExpansion, Restart, Reconfigure, ReconfigureTLS, Reprovision)
+type MongoDBOpsRequestType string
 
 // MongoDBReplicaReadinessCriteria is the criteria for checking readiness of a MongoDB pod
 // after restarting the pod
@@ -87,7 +97,7 @@ type MongoDBReplicaReadinessCriteria struct {
 	ObjectsCountDiffPercentage int32 `json:"objectsCountDiffPercentage,omitempty"`
 }
 
-type MongoDBUpgradeSpec struct {
+type MongoDBUpdateVersionSpec struct {
 	// Specifies the target version name from catalog
 	TargetVersion string `json:"targetVersion,omitempty"`
 }
@@ -108,33 +118,40 @@ type MongosNode struct {
 	Replicas int32 `json:"replicas,omitempty"`
 }
 
+type HiddenNode struct {
+	Replicas int32 `json:"replicas,omitempty"`
+}
+
 // HorizontalScaling is the spec for mongodb horizontal scaling
 type MongoDBHorizontalScalingSpec struct {
 	Shard        *MongoDBShardNode `json:"shard,omitempty"`
 	ConfigServer *ConfigNode       `json:"configServer,omitempty"`
 	Mongos       *MongosNode       `json:"mongos,omitempty"`
+	Hidden       *HiddenNode       `json:"hidden,omitempty"`
 	Replicas     *int32            `json:"replicas,omitempty"`
 }
 
 // MongoDBVerticalScalingSpec is the spec for mongodb vertical scaling
 type MongoDBVerticalScalingSpec struct {
-	Standalone   *core.ResourceRequirements `json:"standalone,omitempty"`
-	ReplicaSet   *core.ResourceRequirements `json:"replicaSet,omitempty"`
-	Mongos       *core.ResourceRequirements `json:"mongos,omitempty"`
-	ConfigServer *core.ResourceRequirements `json:"configServer,omitempty"`
-	Shard        *core.ResourceRequirements `json:"shard,omitempty"`
-	Exporter     *core.ResourceRequirements `json:"exporter,omitempty"`
-	Coordinator  *core.ResourceRequirements `json:"coordinator,omitempty"`
+	Standalone   *PodResources       `json:"standalone,omitempty"`
+	ReplicaSet   *PodResources       `json:"replicaSet,omitempty"`
+	Mongos       *PodResources       `json:"mongos,omitempty"`
+	ConfigServer *PodResources       `json:"configServer,omitempty"`
+	Shard        *PodResources       `json:"shard,omitempty"`
+	Arbiter      *PodResources       `json:"arbiter,omitempty"`
+	Hidden       *PodResources       `json:"hidden,omitempty"`
+	Exporter     *ContainerResources `json:"exporter,omitempty"`
+	Coordinator  *ContainerResources `json:"coordinator,omitempty"`
 }
 
 // MongoDBVolumeExpansionSpec is the spec for mongodb volume expansion
 type MongoDBVolumeExpansionSpec struct {
-	// +kubebuilder:default:="Online"
-	Mode         *VolumeExpansionMode `json:"mode,omitempty"`
-	Standalone   *resource.Quantity   `json:"standalone,omitempty"`
-	ReplicaSet   *resource.Quantity   `json:"replicaSet,omitempty"`
-	ConfigServer *resource.Quantity   `json:"configServer,omitempty"`
-	Shard        *resource.Quantity   `json:"shard,omitempty"`
+	Mode         VolumeExpansionMode `json:"mode"`
+	Standalone   *resource.Quantity  `json:"standalone,omitempty"`
+	ReplicaSet   *resource.Quantity  `json:"replicaSet,omitempty"`
+	ConfigServer *resource.Quantity  `json:"configServer,omitempty"`
+	Shard        *resource.Quantity  `json:"shard,omitempty"`
+	Hidden       *resource.Quantity  `json:"hidden,omitempty"`
 }
 
 type MongoDBCustomConfigurationSpec struct {
@@ -143,27 +160,14 @@ type MongoDBCustomConfigurationSpec struct {
 	Mongos       *MongoDBCustomConfiguration `json:"mongos,omitempty"`
 	ConfigServer *MongoDBCustomConfiguration `json:"configServer,omitempty"`
 	Shard        *MongoDBCustomConfiguration `json:"shard,omitempty"`
+	Arbiter      *MongoDBCustomConfiguration `json:"arbiter,omitempty"`
+	Hidden       *MongoDBCustomConfiguration `json:"hidden,omitempty"`
 }
 
 type MongoDBCustomConfiguration struct {
-	ConfigSecret *core.LocalObjectReference `json:"configSecret,omitempty"`
-	// Deprecated
-	InlineConfig string `json:"inlineConfig,omitempty"`
-
-	ApplyConfig        map[string]string `json:"applyConfig,omitempty"`
-	RemoveCustomConfig bool              `json:"removeCustomConfig,omitempty"`
-}
-
-// MongoDBOpsRequestStatus is the status for MongoDBOpsRequest
-type MongoDBOpsRequestStatus struct {
-	Phase OpsRequestPhase `json:"phase,omitempty"`
-	// observedGeneration is the most recent generation observed for this resource. It corresponds to the
-	// resource's generation, which is updated on mutation by the API Server.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Conditions applied to the request, such as approval or denial.
-	// +optional
-	Conditions []kmapi.Condition `json:"conditions,omitempty"`
+	ConfigSecret       *core.LocalObjectReference `json:"configSecret,omitempty"`
+	ApplyConfig        map[string]string          `json:"applyConfig,omitempty"`
+	RemoveCustomConfig bool                       `json:"removeCustomConfig,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

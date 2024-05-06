@@ -23,9 +23,12 @@ import (
 	"kubedb.dev/apimachinery/apis/kubedb"
 	"kubedb.dev/apimachinery/crds"
 
+	promapi "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"gomodules.xyz/pointer"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	appslister "k8s.io/client-go/listers/apps/v1"
+	kmapi "kmodules.xyz/client-go/api/v1"
 	"kmodules.xyz/client-go/apiextensions"
 	meta_util "kmodules.xyz/client-go/meta"
 	appcat "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
@@ -34,6 +37,10 @@ import (
 
 func (_ ProxySQL) CustomResourceDefinition() *apiextensions.CustomResourceDefinition {
 	return crds.MustCustomResourceDefinition(SchemeGroupVersion.WithResource(ResourcePluralProxySQL))
+}
+
+func (p *ProxySQL) AsOwner() *metav1.OwnerReference {
+	return metav1.NewControllerRef(p, SchemeGroupVersion.WithKind(ResourceKindProxySQL))
 }
 
 var _ apis.ResourceInfo = &ProxySQL{}
@@ -47,7 +54,6 @@ func (p ProxySQL) OffshootSelectors() map[string]string {
 		meta_util.NameLabelKey:      p.ResourceFQN(),
 		meta_util.InstanceLabelKey:  p.Name,
 		meta_util.ManagedByLabelKey: kubedb.GroupName,
-		LabelProxySQLLoadBalance:    string(*p.Spec.Mode),
 	}
 }
 
@@ -78,7 +84,7 @@ func (p ProxySQL) ResourceFQN() string {
 }
 
 func (p ProxySQL) ResourceShortCode() string {
-	return ""
+	return ResourceCodeProxySQL
 }
 
 func (p ProxySQL) ResourceKind() string {
@@ -91,6 +97,13 @@ func (p ProxySQL) ResourceSingular() string {
 
 func (p ProxySQL) ResourcePlural() string {
 	return ResourcePluralProxySQL
+}
+
+func (p ProxySQL) GetAuthSecretName() string {
+	if p.Spec.AuthSecret != nil && p.Spec.AuthSecret.Name != "" {
+		return p.Spec.AuthSecret.Name
+	}
+	return meta_util.NameWithSuffix(p.OffshootName(), "auth")
 }
 
 func (p ProxySQL) ServiceName() string {
@@ -145,6 +158,10 @@ func (p proxysqlStatsService) Scheme() string {
 	return ""
 }
 
+func (p proxysqlStatsService) TLSConfig() *promapi.TLSConfig {
+	return nil
+}
+
 func (p ProxySQL) StatsService() mona.StatsAccessor {
 	return &proxysqlStatsService{&p}
 }
@@ -153,12 +170,12 @@ func (p ProxySQL) StatsServiceLabels() map[string]string {
 	return p.ServiceLabels(StatsServiceAlias, map[string]string{LabelRole: RoleStats})
 }
 
-func (p *ProxySQL) SetDefaults() {
+func (p *ProxySQL) SetDefaults(usesAcme bool) {
 	if p == nil {
 		return
 	}
 
-	if p == nil || p.Spec.Mode == nil || p.Spec.Backend == nil {
+	if p == nil || p.Spec.Backend == nil {
 		return
 	}
 
@@ -167,7 +184,33 @@ func (p *ProxySQL) SetDefaults() {
 	}
 
 	p.Spec.Monitor.SetDefaults()
+	p.SetTLSDefaults(usesAcme)
+	p.SetHealthCheckerDefaults()
 	apis.SetDefaultResourceLimits(&p.Spec.PodTemplate.Spec.Resources, DefaultResources)
+}
+
+func (p *ProxySQL) SetHealthCheckerDefaults() {
+	if p.Spec.HealthChecker.PeriodSeconds == nil {
+		p.Spec.HealthChecker.PeriodSeconds = pointer.Int32P(10)
+	}
+	if p.Spec.HealthChecker.TimeoutSeconds == nil {
+		p.Spec.HealthChecker.TimeoutSeconds = pointer.Int32P(10)
+	}
+	if p.Spec.HealthChecker.FailureThreshold == nil {
+		p.Spec.HealthChecker.FailureThreshold = pointer.Int32P(1)
+	}
+}
+
+func (m *ProxySQL) SetTLSDefaults(usesAcme bool) {
+	if m.Spec.TLS == nil || m.Spec.TLS.IssuerRef == nil {
+		return
+	}
+
+	m.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(m.Spec.TLS.Certificates, string(ProxySQLServerCert), m.CertificateName(ProxySQLServerCert))
+	if !usesAcme {
+		m.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(m.Spec.TLS.Certificates, string(ProxySQLClientCert), m.CertificateName(ProxySQLClientCert))
+		m.Spec.TLS.Certificates = kmapi.SetMissingSecretNameForCertificate(m.Spec.TLS.Certificates, string(ProxySQLMetricsExporterCert), m.CertificateName(ProxySQLMetricsExporterCert))
+	}
 }
 
 func (p *ProxySQLSpec) GetPersistentSecrets() []string {
@@ -186,4 +229,27 @@ func (p *ProxySQL) ReplicasAreReady(lister appslister.StatefulSetLister) (bool, 
 	// Desire number of statefulSets
 	expectedItems := 1
 	return checkReplicas(lister.StatefulSets(p.Namespace), labels.SelectorFromSet(p.OffshootLabels()), expectedItems)
+}
+
+// GetCertSecretName returns the secret name for a certificate alias if any,
+// otherwise returns default certificate secret name for the given alias.
+func (m *ProxySQL) GetCertSecretName(alias ProxySQLCertificateAlias) string {
+	if m.Spec.TLS != nil {
+		name, ok := kmapi.GetCertificateSecretName(m.Spec.TLS.Certificates, string(alias))
+		if ok {
+			return name
+		}
+	}
+	return m.CertificateName(alias)
+}
+
+// CertificateName returns the default certificate name and/or certificate secret name for a certificate alias
+func (m *ProxySQL) CertificateName(alias ProxySQLCertificateAlias) string {
+	return meta_util.NameWithSuffix(m.Name, fmt.Sprintf("%s-cert", string(alias)))
+}
+
+// IsCluster returns boolean true if the proxysql is in cluster mode, otherwise false
+func (m *ProxySQL) IsCluster() bool {
+	r := m.Spec.Replicas
+	return *r > 1
 }

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//go:generate go-enum --mustparse --names --values
 package v1alpha1
 
 import (
@@ -22,7 +23,6 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
 const (
@@ -47,8 +47,8 @@ const (
 type PostgresOpsRequest struct {
 	metav1.TypeMeta   `json:",inline,omitempty"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              PostgresOpsRequestSpec   `json:"spec,omitempty"`
-	Status            PostgresOpsRequestStatus `json:"status,omitempty"`
+	Spec              PostgresOpsRequestSpec `json:"spec,omitempty"`
+	Status            OpsRequestStatus       `json:"status,omitempty"`
 }
 type PostgresTLSSpec struct {
 	TLSSpec `json:",inline,omitempty"`
@@ -67,9 +67,9 @@ type PostgresOpsRequestSpec struct {
 	// Specifies the Postgres reference
 	DatabaseRef core.LocalObjectReference `json:"databaseRef"`
 	// Specifies the ops request type: Upgrade, HorizontalScaling, VerticalScaling etc.
-	Type OpsRequestType `json:"type"`
+	Type PostgresOpsRequestType `json:"type"`
 	// Specifies information necessary for upgrading Postgres
-	Upgrade *PostgresUpgradeSpec `json:"upgrade,omitempty"`
+	UpdateVersion *PostgresUpdateVersionSpec `json:"updateVersion,omitempty"`
 	// Specifies information necessary for horizontal scaling
 	HorizontalScaling *PostgresHorizontalScalingSpec `json:"horizontalScaling,omitempty"`
 	// Specifies information necessary for vertical scaling
@@ -78,42 +78,73 @@ type PostgresOpsRequestSpec struct {
 	VolumeExpansion *PostgresVolumeExpansionSpec `json:"volumeExpansion,omitempty"`
 	// Specifies information necessary for custom configuration of Postgres
 	Configuration *PostgresCustomConfigurationSpec `json:"configuration,omitempty"`
-
 	// Specifies information necessary for configuring TLS
 	TLS *PostgresTLSSpec `json:"tls,omitempty"`
 	// Specifies information necessary for restarting database
 	Restart *RestartSpec `json:"restart,omitempty"`
 	// Timeout for each step of the ops request in second. If a step doesn't finish within the specified timeout, the ops request will result in failure.
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// ApplyOption is to control the execution of OpsRequest depending on the database state.
+	// +kubebuilder:default="IfReady"
+	Apply ApplyOption `json:"apply,omitempty"`
 }
 
-type PostgresUpgradeSpec struct {
+// +kubebuilder:validation:Enum=Upgrade;UpdateVersion;HorizontalScaling;VerticalScaling;VolumeExpansion;Restart;Reconfigure;ReconfigureTLS
+// ENUM(UpdateVersion, HorizontalScaling, VerticalScaling, VolumeExpansion, Restart, Reconfigure, ReconfigureTLS)
+type PostgresOpsRequestType string
+
+type PostgresUpdateVersionSpec struct {
 	// Specifies the target version name from catalog
 	TargetVersion string `json:"targetVersion,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Synchronous;Asynchronous
+type PostgresStreamingMode string
+
+const (
+	SynchronousPostgresStreamingMode  PostgresStreamingMode = "Synchronous"
+	AsynchronousPostgresStreamingMode PostgresStreamingMode = "Asynchronous"
+)
+
+// +kubebuilder:validation:Enum=Hot;Warm
+type PostgresStandbyMode string
+
+const (
+	HotPostgresStandbyMode  PostgresStandbyMode = "Hot"
+	WarmPostgresStandbyMode PostgresStandbyMode = "Warm"
+)
+
 // HorizontalScaling is the spec for Postgres horizontal scaling
 type PostgresHorizontalScalingSpec struct {
 	Replicas *int32 `json:"replicas,omitempty"`
+	// Standby mode
+	// +kubebuilder:default="Warm"
+	StandbyMode *PostgresStandbyMode `json:"standbyMode,omitempty"`
+
+	// Streaming mode
+	// +kubebuilder:default="Asynchronous"
+	StreamingMode *PostgresStreamingMode `json:"streamingMode,omitempty"`
 }
 
 // PostgresVerticalScalingSpec is the spec for Postgres vertical scaling
 type PostgresVerticalScalingSpec struct {
-	Postgres    *core.ResourceRequirements `json:"postgres,omitempty"`
-	Exporter    *core.ResourceRequirements `json:"exporter,omitempty"`
-	Coordinator *core.ResourceRequirements `json:"coordinator,omitempty"`
+	Postgres    *PodResources       `json:"postgres,omitempty"`
+	Exporter    *ContainerResources `json:"exporter,omitempty"`
+	Coordinator *ContainerResources `json:"coordinator,omitempty"`
+	Arbiter     *PodResources       `json:"arbiter,omitempty"`
 }
 
 // PostgresVolumeExpansionSpec is the spec for Postgres volume expansion
 type PostgresVolumeExpansionSpec struct {
 	// volume specification for Postgres
-	Postgres *resource.Quantity   `json:"postgres,omitempty"`
-	Mode     *VolumeExpansionMode `json:"mode,omitempty"`
+	Postgres *resource.Quantity  `json:"postgres,omitempty"`
+	Arbiter  *resource.Quantity  `json:"arbiter,omitempty"`
+	Mode     VolumeExpansionMode `json:"mode"`
 }
 
 type PostgresCustomConfigurationSpec struct {
 	ConfigSecret       *core.LocalObjectReference `json:"configSecret,omitempty"`
-	InlineConfig       string                     `json:"inlineConfig,omitempty"`
+	ApplyConfig        map[string]string          `json:"applyConfig,omitempty"`
 	RemoveCustomConfig bool                       `json:"removeCustomConfig,omitempty"`
 }
 
@@ -121,18 +152,6 @@ type PostgresCustomConfiguration struct {
 	ConfigMap *core.LocalObjectReference `json:"configMap,omitempty"`
 	Data      map[string]string          `json:"data,omitempty"`
 	Remove    bool                       `json:"remove,omitempty"`
-}
-
-// PostgresOpsRequestStatus is the status for PostgresOpsRequest
-type PostgresOpsRequestStatus struct {
-	Phase OpsRequestPhase `json:"phase,omitempty"`
-	// observedGeneration is the most recent generation observed for this resource. It corresponds to the
-	// resource's generation, which is updated on mutation by the API Server.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Conditions applied to the request, such as approval or denial.
-	// +optional
-	Conditions []kmapi.Condition `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

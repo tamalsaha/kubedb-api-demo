@@ -58,6 +58,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ElasticsearchAutoscalerList{},
 		&EtcdAutoscaler{},
 		&EtcdAutoscalerList{},
+		&KafkaAutoscaler{},
+		&KafkaAutoscalerList{},
 		&MariaDBAutoscaler{},
 		&MariaDBAutoscalerList{},
 		&MemcachedAutoscaler{},
@@ -72,8 +74,12 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&PostgresAutoscalerList{},
 		&ProxySQLAutoscaler{},
 		&ProxySQLAutoscalerList{},
+		&RabbitMQAutoscaler{},
+		&RabbitMQAutoscalerList{},
 		&RedisAutoscaler{},
 		&RedisAutoscalerList{},
+		&RedisSentinelAutoscaler{},
+		&RedisSentinelAutoscalerList{},
 	)
 
 	scheme.AddKnownTypes(SchemeGroupVersion,
