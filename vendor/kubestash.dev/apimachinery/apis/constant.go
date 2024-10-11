@@ -16,7 +16,9 @@ limitations under the License.
 
 package apis
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	KubeStashKey              = "kubestash.com"
@@ -93,7 +95,7 @@ const (
 
 	KeyBlueprintName      = BackupBlueprintKey + "/name"
 	KeyBlueprintNamespace = BackupBlueprintKey + "/namespace"
-	KeyBlueprintSessions  = BackupBlueprintKey + "/sessions"
+	KeyBlueprintSessions  = BackupBlueprintKey + "/session-names"
 )
 
 // RBAC related
@@ -104,6 +106,7 @@ const (
 	KubeStashBackendJobClusterRole         = "kubestash-backend-job"
 	KubeStashStorageInitializerClusterRole = "kubestash-storage-initializer-job"
 	KubeStashPopulatorJobClusterRole       = "kubestash-populator-job"
+	KubeStashRetentionPolicyJobClusterRole = "kubestash-retention-policy-job"
 )
 
 // Reconciliation related
@@ -137,6 +140,7 @@ const (
 	ComponentManifest       = "manifest"
 	ComponentVolumeSnapshot = "volumesnapshot"
 	ComponentDashboard      = "dashboard"
+	ComponentPhysical       = "physical"
 )
 
 const (
@@ -150,4 +154,38 @@ const (
 	OwnerKey          = ".metadata.controller"
 	SnapshotVersionV1 = "v1"
 	DirRepository     = "repository"
+)
+
+// Annotations
+const (
+	AnnKubeDBAppVersion          = "kubedb.com/db-version"
+	AnnRestoreSessionBeneficiary = "restoresession.kubestash.com/beneficiary"
+)
+
+// Tasks name related constants
+const (
+	LogicalBackup        = "logical-backup"
+	LogicalBackupRestore = "logical-backup-restore"
+
+	ManifestBackup  = "manifest-backup"
+	ManifestRestore = "manifest-restore"
+
+	VolumeSnapshot        = "volume-snapshot"
+	VolumeSnapshotRestore = "volume-snapshot-restore"
+
+	VolumeClone = "volume-clone"
+)
+
+// KubeDB managed databases Kind
+const (
+	KindMySQL         = "MySQL"
+	KindPostgres      = "Postgres"
+	KindMongoDB       = "MongoDB"
+	KindMariaDB       = "MariaDB"
+	KindRedis         = "Redis"
+	KindMSSQLServer   = "MSSQLServer"
+	KindDruid         = "Druid"
+	KindZooKeeper     = "ZooKeeper"
+	KindSinglestore   = "Singlestore"
+	KindElasticsearch = "Elasticsearch"
 )

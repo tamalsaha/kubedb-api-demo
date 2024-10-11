@@ -29,6 +29,8 @@ import (
 
 type CatalogV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	CassandraVersionsGetter
+	ClickHouseVersionsGetter
 	DruidVersionsGetter
 	ElasticsearchVersionsGetter
 	EtcdVersionsGetter
@@ -47,6 +49,7 @@ type CatalogV1alpha1Interface interface {
 	ProxySQLVersionsGetter
 	RabbitMQVersionsGetter
 	RedisVersionsGetter
+	SchemaRegistryVersionsGetter
 	SinglestoreVersionsGetter
 	SolrVersionsGetter
 	ZooKeeperVersionsGetter
@@ -55,6 +58,14 @@ type CatalogV1alpha1Interface interface {
 // CatalogV1alpha1Client is used to interact with features provided by the catalog.kubedb.com group.
 type CatalogV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *CatalogV1alpha1Client) CassandraVersions() CassandraVersionInterface {
+	return newCassandraVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) ClickHouseVersions() ClickHouseVersionInterface {
+	return newClickHouseVersions(c)
 }
 
 func (c *CatalogV1alpha1Client) DruidVersions() DruidVersionInterface {
@@ -127,6 +138,10 @@ func (c *CatalogV1alpha1Client) RabbitMQVersions() RabbitMQVersionInterface {
 
 func (c *CatalogV1alpha1Client) RedisVersions() RedisVersionInterface {
 	return newRedisVersions(c)
+}
+
+func (c *CatalogV1alpha1Client) SchemaRegistryVersions() SchemaRegistryVersionInterface {
+	return newSchemaRegistryVersions(c)
 }
 
 func (c *CatalogV1alpha1Client) SinglestoreVersions() SinglestoreVersionInterface {

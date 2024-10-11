@@ -56,6 +56,12 @@ spec:
             description: BackupSessionSpec specifies the information related to the
               respective backup invoker and session.
             properties:
+              backupTimeout:
+                description: BackupTimeout specifies the maximum duration of backup.
+                  Backup will be considered Failed if backup tasks do not complete
+                  within this time limit. By default, KubeStash don't set any timeout
+                  for backup.
+                type: string
               invoker:
                 description: Invoker points to the respective BackupConfiguration
                   or BackupBatch which is responsible for triggering this backup.
@@ -79,8 +85,8 @@ spec:
                 x-kubernetes-map-type: atomic
               retryLeft:
                 description: RetryLeft specifies number of retry attempts left for
-                  the session. If this set to non-zero, Stash will create a new BackupSession
-                  if the current one fails.
+                  the session. If this set to non-zero, KubeStash will create a new
+                  BackupSession if the current one fails.
                 format: int32
                 type: integer
               session:
@@ -91,6 +97,11 @@ spec:
           status:
             description: BackupSessionStatus defines the observed state of BackupSession
             properties:
+              backupDeadline:
+                description: BackupDeadline specifies the deadline of backup. Backup
+                  will be considered Failed if it does not complete within this deadline
+                format: date-time
+                type: string
               conditions:
                 description: Conditions represents list of conditions regarding this
                   BackupSession
@@ -192,7 +203,7 @@ spec:
                     type: array
                 type: object
               nextRetry:
-                description: NextRetry specifies the time when Stash should retry
+                description: NextRetry specifies the time when KubeStash should retry
                   the current failed backup. This field will exist only if the `retryConfig`
                   has been set in the respective backup invoker.
                 format: date-time
@@ -249,12 +260,6 @@ spec:
                   not. This field will exist only if the `retryConfig` has been set
                   in the respective backup invoker.
                 type: boolean
-              sessionDeadline:
-                description: Deadline specifies the deadline of backup. BackupSession
-                  will be considered Failed if backup does not complete within this
-                  deadline
-                format: date-time
-                type: string
               snapshots:
                 description: Snapshots specifies the Snapshots status
                 items:
@@ -295,6 +300,11 @@ spec:
                       type: string
                   type: object
                 type: array
+              totalSnapshots:
+                description: TotalSnapshots specifies the total number of snapshots
+                  created for this backupSession.
+                format: int32
+                type: integer
               verifications:
                 description: Verifications specifies the backup verification status
                 items:

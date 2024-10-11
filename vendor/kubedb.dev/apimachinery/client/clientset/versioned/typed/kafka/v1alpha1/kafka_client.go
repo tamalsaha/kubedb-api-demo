@@ -31,6 +31,8 @@ type KafkaV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConnectClustersGetter
 	ConnectorsGetter
+	RestProxiesGetter
+	SchemaRegistriesGetter
 }
 
 // KafkaV1alpha1Client is used to interact with features provided by the kafka.kubedb.com group.
@@ -44,6 +46,14 @@ func (c *KafkaV1alpha1Client) ConnectClusters(namespace string) ConnectClusterIn
 
 func (c *KafkaV1alpha1Client) Connectors(namespace string) ConnectorInterface {
 	return newConnectors(c, namespace)
+}
+
+func (c *KafkaV1alpha1Client) RestProxies(namespace string) RestProxyInterface {
+	return newRestProxies(c, namespace)
+}
+
+func (c *KafkaV1alpha1Client) SchemaRegistries(namespace string) SchemaRegistryInterface {
+	return newSchemaRegistries(c, namespace)
 }
 
 // NewForConfig creates a new KafkaV1alpha1Client for the given config.

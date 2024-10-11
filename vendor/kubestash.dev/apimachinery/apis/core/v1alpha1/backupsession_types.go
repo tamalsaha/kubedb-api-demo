@@ -60,9 +60,14 @@ type BackupSessionSpec struct {
 	Session string `json:"session,omitempty"`
 
 	// RetryLeft specifies number of retry attempts left for the session.
-	// If this set to non-zero, Stash will create a new BackupSession if the current one fails.
+	// If this set to non-zero, KubeStash will create a new BackupSession if the current one fails.
 	// +optional
 	RetryLeft int32 `json:"retryLeft,omitempty"`
+
+	// BackupTimeout specifies the maximum duration of backup. Backup will be considered Failed
+	// if backup tasks do not complete within this time limit. By default, KubeStash don't set any timeout for backup.
+	// +optional
+	BackupTimeout *metav1.Duration `json:"backupTimeout,omitempty"`
 }
 
 // BackupSessionStatus defines the observed state of BackupSession
@@ -75,10 +80,14 @@ type BackupSessionStatus struct {
 	// +optional
 	Duration string `json:"duration,omitempty"`
 
-	// Deadline specifies the deadline of backup. BackupSession will be
-	// considered Failed if backup does not complete within this deadline
+	// BackupDeadline specifies the deadline of backup. Backup will be
+	// considered Failed if it does not complete within this deadline
 	// +optional
-	Deadline *metav1.Time `json:"sessionDeadline,omitempty"`
+	BackupDeadline *metav1.Time `json:"backupDeadline,omitempty"`
+
+	// TotalSnapshots specifies the total number of snapshots created for this backupSession.
+	// +optional
+	TotalSnapshots *int32 `json:"totalSnapshots,omitempty"`
 
 	// Snapshots specifies the Snapshots status
 	// +optional
@@ -101,7 +110,7 @@ type BackupSessionStatus struct {
 	// +optional
 	Retried *bool `json:"retried,omitempty"`
 
-	// NextRetry specifies the time when Stash should retry the current failed backup.
+	// NextRetry specifies the time when KubeStash should retry the current failed backup.
 	// This field will exist only if the `retryConfig` has been set in the respective backup invoker.
 	// +optional
 	NextRetry *metav1.Time `json:"nextRetry,omitempty"`
@@ -213,10 +222,19 @@ const (
 	ReasonSuccessfullyEnsuredBackupExecutor = "SuccessfullyEnsuredBackupExecutor"
 	ReasonFailedToEnsureBackupExecutor      = "FailedToEnsureBackupExecutor"
 
+	// TypeRetentionPolicyExecutorEnsured indicates whether the Backup Executor is ensured or not.
+	TypeRetentionPolicyExecutorEnsured               = "RetentionPolicyExecutorEnsured"
+	ReasonSuccessfullyEnsuredRetentionPolicyExecutor = "SuccessfullyEnsuredRetentionPolicyExecutor"
+	ReasonFailedToEnsureRetentionPolicyExecutor      = "FailedToEnsureRetentionPolicyExecutor"
+
 	// TypeSnapshotsEnsured indicates whether Snapshots are ensured for each Repository or not
 	TypeSnapshotsEnsured               = "SnapshotsEnsured"
 	ReasonSuccessfullyEnsuredSnapshots = "SuccessfullyEnsuredSnapshots"
 	ReasonFailedToEnsureSnapshots      = "FailedToEnsureSnapshots"
+
+	// TypeSnapshotCleanupIncomplete indicates whether Snapshot cleanup incomplete or not
+	TypeSnapshotCleanupIncomplete                   = "SnapshotCleanupIncomplete"
+	ReasonSnapshotCleanupTerminatedBeforeCompletion = "SnapshotCleanupTerminatedBeforeCompletion"
 )
 
 //+kubebuilder:object:root=true
